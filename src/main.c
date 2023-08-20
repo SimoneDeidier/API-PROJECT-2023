@@ -19,15 +19,21 @@
 #define NON_AGGI "non aggiunta"
 #define DEMOLITA "demolita"
 #define NON_DEMO "non demolita"
+#define ROTTAMAT "rottamata"
+#define NON_ROTT "non rottamata"
 #define AGGIUNTA_DIM 8
 #define NON_AGGI_DIM 12
 #define DEMOLITA_DIM 8
 #define NON_DEMO_DIM 12
+#define ROTTAMAT_DIM 9
+#define NON_ROTT_DIM 13
 
 #define HASH_DIM 1024 * 16
 #define A 0.6180339887498948482045868343656381177203091798057628621354486227
 
-#define DEBUG 0
+#define N_AGGIUNGI_AUTO_PAR 2
+
+#define DEBUG 1
 #define MALLOC 0
 #define STAMPA_STRUTTURE 1
 
@@ -59,6 +65,12 @@ void insertInHashTable(bucket**, bucket*, int);
 int readDemolisciStazioneParameter();
 void freeBST(leaf*);
 void removeFromHashTable(bucket**, int, int);
+void removeFromBST(leaf**, leaf*);
+leaf* nextInBST(leaf*);
+leaf* minInBST(leaf*);
+void readTwoIntegerParameters(int**);
+void addVeichle(bucket**, int, leaf*, int);
+int scrapVeichle(bucket**, int, int, int);
 
 // DEBUG FUNC
 void inOrderBST(leaf*);
@@ -121,10 +133,12 @@ int main() {
                     insertInBST(&distanceBst, distanceLeaf);
                     bucket* hashTableElement = (bucket*) malloc(sizeof(bucket));    // and add his veichles into hash table
                     hashTableElement->distance = commandArguments[0];
-                    for(int i = 2; i < commandArguments[1] + 2; i++) {
-                        leaf* veichleLeaf = (leaf*) malloc(sizeof(leaf));
-                        veichleLeaf->key = commandArguments[i];
-                        insertInBST(&(hashTableElement->veichles), veichleLeaf);
+                    if(commandArguments[1] > 0) {
+                        for(int i = 2; i < commandArguments[1] + 2; i++) {
+                            leaf* veichleLeaf = (leaf*) malloc(sizeof(leaf));
+                            veichleLeaf->key = commandArguments[i];
+                            insertInBST(&(hashTableElement->veichles), veichleLeaf);
+                        }
                     }
                     insertInHashTable(hashtable, hashTableElement, hashFunction(commandArguments[0]));
                     printStdinOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
@@ -143,8 +157,8 @@ int main() {
                 int toDemolish = readDemolisciStazioneParameter();
                 leaf* found = searchInBST(distanceBst, toDemolish);
                 if(found != NULL) {
-                    // TODO rimuovere da bst la distanza
                     removeFromHashTable(hashtable, hashFunction(toDemolish), toDemolish);
+                    removeFromBST(&distanceBst, found);
                     printStdinOptimized(DEMOLITA, DEMOLITA_DIM);
                 }
                 else {
@@ -155,17 +169,42 @@ int main() {
                 #if DEBUG
                     printf("Aggiungi auto!\n");
                 #endif
+                readTwoIntegerParameters(&commandArguments);
+                leaf* found = searchInBST(distanceBst, commandArguments[0]);
+                if(found != NULL) {
+                    leaf* veichleToAdd = malloc(sizeof(leaf));
+                    veichleToAdd->key = commandArguments[1];
+                    addVeichle(hashtable, hashFunction(commandArguments[0]), veichleToAdd, commandArguments[0]);
+                    printStdinOptimized(AGGIUNTA, AGGIUNTA_DIM);
+                }
+                else {
+                    printStdinOptimized(NON_AGGI, NON_AGGI_DIM);
+                }
             }
             else if(stringCompare(command, ROT_AUTO, ROT_AUTO_DIM)) {
                 #if DEBUG
                     printf("Rottama auto!\n");
                 #endif
+                readTwoIntegerParameters(&commandArguments);
+                leaf* found = searchInBST(distanceBst, commandArguments[0]);
+                if(found != NULL) {
+                    if(scrapVeichle(hashtable, hashFunction(commandArguments[0]), commandArguments[1], commandArguments[0])) {
+                        printStdinOptimized(ROTTAMAT, ROTTAMAT_DIM);
+                    }
+                    else {
+                        printStdinOptimized(NON_ROTT, NON_ROTT_DIM);
+                    }
+                }
+                else {
+                    printStdinOptimized(NON_ROTT, NON_ROTT_DIM);
+                }
             }
-            // TODO questo else if si può togliere secondo me
             else if(stringCompare(command, PIA_PERC, PIA_PERC_DIM)) {
                 #if DEBUG
                     printf("Pianifica percorso!\n");
                 #endif
+                readTwoIntegerParameters(&commandArguments);
+                printf("pianifica-percorso\n");
             }
             else {
                 #if DEBUG
@@ -217,6 +256,7 @@ int stringCompare(char* a, char* b, int dim) {  // compare two strings
 }
 
 void readAggiungiStazioneParameters(int** vector) { // read all the parameters of the command "aggiungi-stazione"
+    
     char read = '\0';
     int distance = 0, size = 0, val;
 
@@ -233,22 +273,24 @@ void readAggiungiStazioneParameters(int** vector) { // read all the parameters o
             size = size*10 + read - '0';
         }
     }while(read != ' ');
-    if(*vector != NULL) {
-        free(*vector);
-    }
-    (*vector) = (int*) malloc(sizeof(int) * (size + 2));    // allocate memory
-    (*vector)[0] = distance;    // save as first value # veichles
-    (*vector)[1] = size;
-    for(int i = 2; i < size + 2; i++) { // read all veichle values from stdin
-        read = '\0';
-        val = 0;
-        do {
-            read = getchar_unlocked();
-            if(read != ' ' && read != '\n' && read != EOF) {
-                val = val*10 + read - '0';
-            }
-        }while(read != ' ' && read != '\n' && read != EOF);
-        (*vector)[i] = val;
+    if(size > 0) {
+        if(*vector != NULL) {
+            free(*vector);
+        }
+        (*vector) = (int*) malloc(sizeof(int) * (size + 2));    // allocate memory
+        (*vector)[0] = distance;    // save as first value # veichles
+        (*vector)[1] = size;
+        for(int i = 2; i < size + 2; i++) { // read all veichle values from stdin
+            read = '\0';
+            val = 0;
+            do {
+                read = getchar_unlocked();
+                if(read != ' ' && read != '\n' && read != EOF) {
+                    val = val*10 + read - '0';
+                }
+            }while(read != ' ' && read != '\n' && read != EOF);
+            (*vector)[i] = val;
+        }
     }
     return;
 }
@@ -363,7 +405,7 @@ void freeBST(leaf* T) { // post order BST visit to free all the leafs
 
 }
 
-void removeFromHashTable(bucket** hashTable, int hash, int distance) {
+void removeFromHashTable(bucket** hashTable, int hash, int distance) {  // remove element from hash table
     
     bucket* curr = hashTable[hash];
     if(curr->next == NULL) {    // if there is no list, free the element
@@ -390,6 +432,123 @@ void removeFromHashTable(bucket** hashTable, int hash, int distance) {
 
 }
 
+void removeFromBST(leaf** T, leaf* x) { // remove element from BST
+
+    leaf* toDelete = NIL;
+    leaf* under = NIL;
+
+    if(x->left == NIL || x->right == NIL) {
+        toDelete = x;
+    }
+    else {
+        toDelete = nextInBST(x);
+    }
+    if(toDelete->left != NIL) {
+        under = (leaf*) toDelete->left;
+    }
+    else {
+        under = (leaf*) toDelete->right;
+    }
+    if(under != NIL) {
+        under->p = toDelete->p;
+    }
+    leaf* toDelete_p = (leaf*) toDelete->p;
+    if(toDelete->p == NIL) {
+        (*T) = under;
+    }
+    else if(toDelete == (leaf*) toDelete_p->left) {
+        toDelete_p->left = (struct leaf*) under;
+    }
+    else {
+        toDelete_p->right = (struct leaf*) under;
+    }
+    if(toDelete != x) {
+        x->key = toDelete->key;
+    }
+    free(toDelete);
+    return;
+
+}
+
+leaf* minInBST(leaf* T) {   // search for element with min key in BST
+
+    leaf* curr = T;
+
+    while(curr->left != NIL) {
+        curr = (leaf*) curr->left;
+    }
+    return curr;
+
+}
+
+leaf* nextInBST(leaf* x) {  // search element with next value of the key in BST
+
+    leaf* y = NIL;
+
+    if(x->right != NIL) {
+        return minInBST((leaf*) x->right);
+    }
+    y = (leaf*) x->p;
+    while(y != NIL && (leaf*) y->right == x) {
+        x = y;
+        y = (leaf*) y->p;
+    }
+    return y;
+
+}
+
+void readTwoIntegerParameters(int** vector) {  // read arguments for aggiungi-auto cmd
+
+    char read = '\0';
+    int val = 0;
+
+    if(*vector != NULL) {
+        free(*vector);
+    }
+    (*vector) = (int*) malloc(sizeof(int) * N_AGGIUNGI_AUTO_PAR);
+    for(int i = 0; i < N_AGGIUNGI_AUTO_PAR; i++) {
+        val = 0;
+        do {
+            read = getchar_unlocked();  // read two integer values
+            if(read != ' ' && read != '\n' && read != EOF) {
+                val = val*10 + read - '0';
+            }
+        }while(read != ' ' && read != '\n' && read != EOF);
+        (*vector)[i] = val;
+    }
+    return;
+
+}
+
+void addVeichle(bucket** hashTable, int hash, leaf* veichleToAdd, int distance) {   // adds a new veichle into the BST of veichles of one station
+
+    bucket* curr = hashTable[hash]; // start from the head of the list
+
+    while(curr->distance != distance) {
+        curr = (bucket*) curr->next;    // search for the bucket with the right distance
+    }
+    insertInBST(&(curr->veichles), veichleToAdd);   // add new veichle in BST
+
+}
+
+int scrapVeichle(bucket** hashTable, int hash, int autonomy, int distance) {    // remove, if exists, an element from the BST
+
+    bucket* curr = hashTable[hash]; // statr from the head of the list
+
+    while(curr->distance != distance) {
+        curr = (bucket*) curr->next;    // search for the bucket with the right distance
+    }
+    leaf* toScrap = searchInBST(curr->veichles, autonomy);  // check if exists the element to scrap
+    if(toScrap == NULL) {   // if not exists return false
+        return 0;
+    }
+    else {
+        removeFromBST(&curr->veichles, toScrap);    // else remove it and return true
+        return 1;
+    }
+
+}
+
 // ********* DEBUG FUNCTIONS *********
 
 void inOrderBST(leaf* T) {
@@ -410,6 +569,7 @@ void printHashValues(bucket** hashTable) {
     for(int i = 0; i < HASH_DIM; i++) {
         if(hashTable[i] != NULL) {
             printf("ELEMENTO IN POS %d\n", i);
+            printf("DISTANZA: %d\n", hashTable[i]->distance);
             printf("PARCO AUTO:\n");
             inOrderBST(hashTable[i]->veichles);
         }

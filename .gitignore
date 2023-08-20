@@ -56,3 +56,6 @@ dkms.conf
 
 # Test files
 test.*
+src/test/*
+src/test/**
+out.txt
