@@ -74,7 +74,6 @@ leaf* minInBST(leaf*);
 void readTwoIntegerParameters(int**);
 void addVeichle(bucket**, int, leaf*, int);
 int scrapVeichle(bucket**, int, int, int);
-int checkPianificaPercorsoParameters(leaf*, int, int);
 void createGraphMatrix(int**, int, int, int*, leaf*, bucket**, int*);
 int nStationsBetweenTwo(leaf*, int, int);
 
@@ -232,13 +231,6 @@ int main() {
                     printf("Pianifica percorso!\n");
                 #endif
                 readTwoIntegerParameters(&commandArguments);
-                int ok = checkPianificaPercorsoParameters(distanceBst, commandArguments[0], commandArguments[1]);
-                if(!ok) {
-                    printStdinOptimized(NESS_PER, NESS_PER_DIM);
-                }
-                else {
-
-                }
                 /*if(commandArguments[0] < commandArguments[1]) {
                     #if DEBUG
                         printf("PIANIFICA PERCORSO ANDATA");
@@ -647,20 +639,6 @@ leaf* maxInBST(leaf* T) {
         curr = curr->right;
     }
     return curr;
-
-}
-
-int checkPianificaPercorsoParameters(leaf* distanceBST, int start, int end) {
-
-    leaf* leaf = searchInBST(distanceBST, start);
-    if(leaf == NIL) {
-        return 0;
-    }
-    leaf = searchInBST(distanceBST, end);
-    if(leaf == NIL) {
-        return 0;
-    }
-    return 1;
 
 }
 
