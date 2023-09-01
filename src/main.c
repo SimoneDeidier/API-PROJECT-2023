@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #define MAX_CMD 19
 #define AGG_STAZ "aggiungi-s"   // aggiungi-stazione
@@ -86,7 +87,7 @@ void inOrderBST(leaf*);
 void printHashValues(bucket**);
 
 // const for hash values calc
-const int molt = (uint32_t)((double)A * ((uint64_t)1 << 32));
+const int molt = (uint32_t)((double)A * ((uint64_t)(1) << 32));
 
 int main() {
 
@@ -644,7 +645,7 @@ leaf* maxInBST(leaf* T) {
     leaf* curr = T;
 
     while(curr->right != NIL) {
-        curr = curr->right;
+        curr = (leaf*) curr->right;
     }
     return curr;
 
