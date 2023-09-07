@@ -36,9 +36,13 @@
 
 #define N_AGGIUNGI_AUTO_PAR 2
 
+#define MAX_INT 2147483647
+
 #define DEBUG 0
 #define MALLOC 0
 #define STAMPA_STRUTTURE 0
+#define PPTEST 0
+#define CHECK_PREV 0
 
 typedef struct {
 
@@ -63,7 +67,7 @@ int stringCompare(char*, char*, int);
 void readAggiungiStazioneParameters(int**);
 void insertInBST(leaf**, leaf*);
 leaf* searchInBST(leaf*, int);
-void printStdinOptimized(char*, int);
+void printStdoutOptimized(char*, int);
 int hashFunction(int);
 void insertInHashTable(bucket**, bucket*, int);
 int readDemolisciStazioneParameter();
@@ -75,11 +79,14 @@ leaf* minInBST(leaf*);
 void readTwoIntegerParameters(int**);
 void addVeichle(bucket**, int, leaf*, int);
 int scrapVeichle(bucket**, int, int, int);
-void createGraphMatrix(int**, int, int, int*, leaf*, bucket**, int*);
-int nStationsBetweenTwo(leaf*, int, int);
-
-// int pianificaPercorsoBackwards(bucket**, leaf*, int, int , char**);
 leaf* maxInBST(leaf*);
+int getMaxAutonomyFromDistance(int, bucket**, int);
+int pianificaPercorsoForward(leaf*, int, int**, int, bucket**, int*);
+int pianificaPercorsoBackwards(leaf*, int, int**, int, bucket**, int*, leaf*);
+leaf* previousInBST(leaf*);
+leaf* getMaxReachable(leaf*, bucket**, int, leaf*);
+void printPianificaPercorsoForward(int*, int, int);
+
 
 // DEBUG FUNC
 void inOrderBST(leaf*);
@@ -95,11 +102,8 @@ int main() {
     int* commandArguments = NULL;
     leaf* distanceBst = NIL;
     bucket* hashtable[HASH_DIM];
-    char* output = NULL;
+    int* output = NULL;
     int num_stations = 0;
-    int** graphMatx = NULL;
-    int* stationsToIdx = NULL;
-    int matxAndVecDim = 0;
 
     // initialize hash table
     for(int i = 0; i < HASH_DIM; i++) {
@@ -167,14 +171,14 @@ int main() {
                         }
                     }
                     insertInHashTable(hashtable, hashTableElement, hashFunction(commandArguments[0]));
-                    printStdinOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
+                    printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
                     num_stations++;
                 }
                 else {
                     #if DEBUG
                         printf("NOT ADDED STATION!\n");
                     #endif
-                    printStdinOptimized(NON_AGGI, NON_AGGI_DIM);    // if already exist, print non aggiunta
+                    printStdoutOptimized(NON_AGGI, NON_AGGI_DIM);    // if already exist, print non aggiunta
                 }
             }
             else if(stringCompare(command, DEM_STAZ, DEM_STAZ_DIM)) {
@@ -186,11 +190,11 @@ int main() {
                 if(found != NULL) {
                     removeFromHashTable(hashtable, hashFunction(toDemolish), toDemolish);
                     removeFromBST(&distanceBst, found);
-                    printStdinOptimized(DEMOLITA, DEMOLITA_DIM);
+                    printStdoutOptimized(DEMOLITA, DEMOLITA_DIM);
                     num_stations--;
                 }
                 else {
-                    printStdinOptimized(NON_DEMO, NON_DEMO_DIM);
+                    printStdoutOptimized(NON_DEMO, NON_DEMO_DIM);
                 }
             }
             else if(stringCompare(command, AGG_AUTO, AGG_AUTO_DIM)) {
@@ -203,10 +207,10 @@ int main() {
                     leaf* veichleToAdd = malloc(sizeof(leaf));
                     veichleToAdd->key = commandArguments[1];
                     addVeichle(hashtable, hashFunction(commandArguments[0]), veichleToAdd, commandArguments[0]);
-                    printStdinOptimized(AGGIUNTA, AGGIUNTA_DIM);
+                    printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);
                 }
                 else {
-                    printStdinOptimized(NON_AGGI, NON_AGGI_DIM);
+                    printStdoutOptimized(NON_AGGI, NON_AGGI_DIM);
                 }
             }
             else if(stringCompare(command, ROT_AUTO, ROT_AUTO_DIM)) {
@@ -217,14 +221,14 @@ int main() {
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
                     if(scrapVeichle(hashtable, hashFunction(commandArguments[0]), commandArguments[1], commandArguments[0])) {
-                        printStdinOptimized(ROTTAMAT, ROTTAMAT_DIM);
+                        printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
                     else {
-                        printStdinOptimized(NON_ROTT, NON_ROTT_DIM);
+                        printStdoutOptimized(NON_ROTT, NON_ROTT_DIM);
                     }
                 }
                 else {
-                    printStdinOptimized(NON_ROTT, NON_ROTT_DIM);
+                    printStdoutOptimized(NON_ROTT, NON_ROTT_DIM);
                 }
             }
             else if(stringCompare(command, PIA_PERC, PIA_PERC_DIM)) {
@@ -232,23 +236,60 @@ int main() {
                     printf("Pianifica percorso!\n");
                 #endif
                 readTwoIntegerParameters(&commandArguments);
-                /*if(commandArguments[0] < commandArguments[1]) {
+                #if DEBUG
+                    printf("pianifica-percorso %d %d\n", commandArguments[0], commandArguments[1]);
+                    printHashValues(hashtable);
+                #endif
+                if(commandArguments[0] < commandArguments[1]) {
                     #if DEBUG
-                        printf("PIANIFICA PERCORSO ANDATA");
+                        printf("PIANIFICA PERCORSO ANDATA\n");
                     #endif
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    #if DEBUG
+                        printf("STAZIONE START TROVATA\n");
+                    #endif
+                    output = (int*) malloc(sizeof(int) * num_stations);
+                    int exist = 0;
+                    #if DEBUG
+                        printf("FUNZIONE PIANIFICA PERCORSO FORWARD\n");
+                    #endif
+                    int pathDim = pianificaPercorsoForward(startLeaf, commandArguments[1], &output, 0, hashtable, &exist);
+                    if(!exist) {
+                        printStdoutOptimized(NESS_PER, NESS_PER_DIM);
+                    }
+                    else {
+                        printPianificaPercorsoForward(output, pathDim, commandArguments[0]);
+                    }
+                    // free the output vector mallocated
+                    free(output);
                 }
                 else {
                     #if DEBUG
-                        printf("PIANIFICA PERCORSO RITORNO");
+                        printf("PIANIFICA PERCORSO RITORNO\n");
                     #endif
-                    int n_stations = pianificaPercorsoBackwards(hashtable, distanceBst, commandArguments[0], commandArguments[1], &output);
-                    if(n_stations == -1) {
-                        printStdinOptimized(NESS_PER, NESS_PER_DIM);
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    #if DEBUG
+                        printf("STAZIONE START TROVATA\n");
+                    #endif
+                    output = (int*) malloc(sizeof(int) * num_stations);
+                    int exist = 0;
+                    #if DEBUG
+                        printf("FUNZIONE PIANIFICA PERCORSO BACKWARDS\n");
+                    #endif
+                    int pathDim = pianificaPercorsoBackwards(startLeaf, commandArguments[1], &output, 0, hashtable, &exist, distanceBst);
+                    printf("%d\n", pathDim);
+                    if(!exist) {
+                        printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
                     else {
-
+                        printf("MIN PATH: %d\n", pathDim);
+                        for(int i = 0; i < num_stations; i++) {
+                            printf("%d\n", output[i]);
+                        }
                     }
-                }*/
+                    // free the output vector mallocated
+                    free(output);
+                }
             }
             else {
                 #if DEBUG
@@ -397,7 +438,7 @@ leaf* searchInBST(leaf* T, int x) { // search for value in BST
 
 }
 
-void printStdinOptimized(char* str, int dim) {
+void printStdoutOptimized(char* str, int dim) {
     
     for (int i = 0; i < dim; i++) {
         putchar_unlocked(str[i]);
@@ -618,20 +659,6 @@ int scrapVeichle(bucket** hashTable, int hash, int autonomy, int distance) {    
 
 }
 
-/* int pianificaPercorsoBackwards(bucket** hashTable, leaf* distanceBST, int start, int end, char** out) {
-
-    leaf* curr = searchInBST(distanceBST, start);
-    if(curr == NIL) {
-        return -1;
-    }
-    leaf* endLeaf = searchInBST(distanceBST, end);
-    if(endLeaf == NIL) {
-        return -1;
-    }
-    return 0;
-
-} */
-
 leaf* maxInBST(leaf* T) {
 
     leaf* curr = T;
@@ -643,40 +670,250 @@ leaf* maxInBST(leaf* T) {
 
 }
 
-void createGraphMatrix(int** matrix, int start, int end, int* dim, leaf* distanceBST, bucket** hashTable, int* vec) {
-
-    *dim = nStationsBetweenTwo(distanceBST, start, end);
-    matrix = (int**) malloc(sizeof(int*) * *dim);
-    vec = (int*) malloc(sizeof(int) * *dim);
-    leaf* curr = searchInBST(distanceBST, start);
-    int i = 0, j = 0;
-    do {
-        matrix[i] = (int*) malloc(sizeof(int) * *dim);
-        vec[i] = curr->key; // TODO necessario???
-        if(start < end) {
-            
-        }
-
-        i++;
-        curr = nextInBST(curr);
-    }while(curr != NIL && curr->key <= end);
-    /*for(int i = 0; i < *dim; i++) {
-        matrix[i] = (int*) malloc(sizeof(int) * *dim);
-        vec[i] = 
-    }*/
+int getMaxAutonomyFromDistance(int dist, bucket** hashTable, int hash) {
+    
+    bucket* curr = hashTable[hash];
+    while(curr->distance != dist) {
+        curr = (bucket*) curr->next;
+    }
+    return curr->maxAutonomy;
 
 }
 
-int nStationsBetweenTwo(leaf* T, int a, int b) {
+int pianificaPercorsoForward(leaf* curr, int dest, int** path, int size, bucket** hashTable, int* exist) {
 
-    int count = 0;
-
-    leaf* curr = searchInBST(T, a);
-    while(curr->key != b) {
-        curr = nextInBST(curr);
-        count++;
+    #if DEBUG
+        printf("DISTANZA %d - %d\n", curr->key, dest);
+    #endif
+    if(curr->key == dest) {
+        *exist = 1;
+        return 0;
     }
-    return count++;
+
+    int currAutonomy = getMaxAutonomyFromDistance(curr->key, hashTable, hashFunction(curr->key));
+    #if PPTEST
+        printf("MAX_A @ %d: %d\n", curr->key, currAutonomy);
+    #endif
+    leaf* next = nextInBST(curr);
+    int minDist = MAX_INT;
+    if(curr->key + currAutonomy < next->key) {
+        return minDist;
+    }
+    do {
+        #if PPTEST
+            printf("ADIACENTE A %d: %d\n", curr->key, next->key);
+        #endif
+        int dist = 1 + pianificaPercorsoForward(next, dest, path, size+1, hashTable, exist);
+        #if PPTEST
+            printf("DISTANCE %d - %d CON TAPPA %d: %d\n", curr->key, dest, next->key, dist);
+        #endif
+        if(dist < minDist) {
+            minDist = dist;
+            (*path)[size] = next->key;
+        }
+        next = nextInBST(next);
+    } while(next != NULL && curr->key + currAutonomy >= next->key && next->key <= dest);
+    #if PPTEST
+        printf("MIN DISTANCE %d - %d: %d\n", curr->key, dest, minDist);
+    #endif
+    return minDist;
+
+}
+
+int pianificaPercorsoBackwards(leaf* curr, int dest, int** path, int size, bucket** hashTable, int* exist, leaf* distanceBST) {
+
+    /*#if CHECK_PREV
+        leaf* x = curr;
+        do {
+            printf("SONO %d\n", x->key);
+            x = previousInBST(x);
+        }while(x != NULL);
+        return 0;
+    #endif
+
+    #if PPTEST
+        printf("DISTANZA %d - %d\n", curr->key, dest);
+    #endif*/
+    if(curr->key == dest) {
+        *exist = 1;
+        return 0;
+    }
+
+    /*int currAutonomy = getMaxAutonomyFromDistance(curr->key, hashTable, hashFunction(curr->key));
+    leaf* next = curr;
+    leaf* previous = previousInBST(curr);
+    int minDist = MAX_INT;
+    if(curr->key - currAutonomy > previous->key) {
+        return minDist;
+    }
+    while(previous != NULL && curr->key - currAutonomy <= previous->key && previous->key >= dest) {
+        next = previous;
+        previous = previousInBST(next);
+    }
+    do {
+        #if PPTEST
+            if(previous != NULL) {
+                printf("ADIACENTE A %d: %d\n(NEXT: %d)\n", curr->key, next->key, previous->key);
+            }
+            else {
+                printf("ADIACENTE A %d: %d\n", curr->key, next->key);
+            }
+        #endif
+        int dist = 1 + pianificaPercorsoBackwards(next, dest, path, size+1, hashTable, exist);
+        #if PPTEST
+            printf("DISTANCE %d - %d CON TAPPA %d: %d\n", curr->key, dest, next->key, dist);
+        #endif
+        if(dist < minDist) {
+            #if PPTEST
+                printf("HO TROVATO UN PATH MINIMO TRA %d E %d: VALORE %d\n", curr->key, dest, dist);
+            #endif
+            minDist = dist;
+            (*path)[size] = next->key;
+            #if PPTEST
+                printf("HO SCRITTO %d IN POS %d\n", next->key, size);
+            #endif
+        }
+        next = nextInBST(next);
+    } while(next != NULL && next->key < curr->key);
+    #if PPTEST
+        printf("MIN DISTANCE %d - %d: %d\n", curr->key, dest, minDist);
+    #endif
+    return minDist;
+    int minDist = MAX_INT;
+    leaf* maxReachable = getMaxReachable(curr, hashTable, dest, distanceBST);
+
+    if(maxReachable->key == curr->key) {
+        return minDist;
+    }
+    do {
+        int dist = 1 + pianificaPercorsoBackwards(maxReachable, dest, path, size+1, hashTable, exist, distanceBST);
+        if(dist < minDist) {
+            minDist = dist;
+            (*path)[size] = maxReachable->key;
+        }
+        #if PPTEST
+            printf("FINITO DI CONTROLLARE %d\n", maxReachable->key);
+        #endif
+        maxReachable = nextInBST(maxReachable);
+        #if PPTEST
+            printf("ORA CONTROLLO %d\n", maxReachable->key);
+        #endif
+    }while(maxReachable->key != curr->key);
+    return minDist;*/
+
+    leaf* cursor = curr;
+    int minDistance = MAX_INT;
+    int distance = 0;
+    do {
+        #if PPTEST
+            printf("START CHECK SU: %d\n", cursor->key);
+        #endif
+        int maxAutonomy = getMaxAutonomyFromDistance(cursor->key, hashTable, hashFunction(cursor->key));
+        if(cursor->key - maxAutonomy <= dest) {
+            #if PPTEST
+                printf("%d PUO' RAGGIUNGERE %d, AUTONOMIA: %d\n", cursor->key, dest, maxAutonomy);
+            #endif
+            distance = 1 + pianificaPercorsoBackwards(curr, cursor->key, path, size+1, hashTable, exist, distanceBST);
+            if(distance < minDistance || (distance == minDistance && cursor->key < (*path)[size])) {
+                minDistance = distance;
+                (*path)[size] = cursor->key;
+                #if PPTEST
+                    printf("NUOVO PERCORSO MIGLIORE:\n");
+                    for(int i = 0; i < size+1; i++) {
+                        printf("%d - ", (*path)[i]);
+                    }
+                    printf("\n");
+                #endif
+            }
+        }
+        #if PPTEST
+            printf("END CHECK SU: %d\n", cursor->key);
+        #endif
+        cursor = previousInBST(cursor);
+    }while(cursor->key != dest);
+    return minDistance;
+
+}
+
+leaf* previousInBST(leaf* x) {  // search element with next value of the key in BST
+
+    leaf* y = NIL;
+
+    if(x->left != NIL) {
+        return maxInBST((leaf*) x->left);
+    }
+    y = (leaf*) x->p;
+    while(y != NIL && (leaf*) y->left == x) {
+        x = y;
+        y = (leaf*) y->p;
+    }
+    return y;
+
+}
+
+leaf* getMaxReachable(leaf* curr, bucket** hashtable, int dest, leaf* T) {
+
+    int autonomy = getMaxAutonomyFromDistance(curr->key, hashtable, hashFunction(curr->key));
+    int maxReachable = curr->key - autonomy;
+
+    #if PPTEST
+        printf("MAX REACHABLE DA %d CON AUTONOMIA %d\n", curr->key, autonomy);
+        printf("MAX REACHABLE: %d\n", maxReachable);
+    #endif
+    if(maxReachable <= 0) {
+        return searchInBST(T, dest);
+    }
+    leaf* res = curr;
+    leaf* prev = NULL;
+    while(res->key >= maxReachable) {
+        prev = res;
+        res = previousInBST(res);
+        #if PPTEST
+            printf("RES: %d\n", res->key);
+        #endif
+    }
+    #if PPTEST
+        printf("RITORNO: %d\n", prev->key);
+    #endif
+    return prev;
+
+}
+
+void printIntStdoutOptimized(int x) {
+
+    int N = x, rev, count = 0;
+    rev = N;
+    if (N == 0) {
+        putchar_unlocked('0');
+        return ;
+    }
+    while((rev % 10) == 0) { 
+        count++;
+        rev /= 10;
+    }
+    rev = 0;
+    while(N != 0) {
+        rev = (rev<<3) + (rev<<1) + N % 10;
+        N /= 10;
+    }
+    while(rev != 0) {
+        putchar_unlocked(rev % 10 + '0');
+        rev /= 10;
+    }
+    while(count--) {
+        putchar_unlocked('0');
+    }
+
+}
+
+void printPianificaPercorsoForward(int* stations, int dim, int start) {
+
+    printIntStdoutOptimized(start);
+    for(int i = 0; i < dim; i++) {
+        putchar_unlocked(' ');
+        printIntStdoutOptimized(stations[i]);
+    }
+    return;
 
 }
 
@@ -699,10 +936,15 @@ void printHashValues(bucket** hashTable) {
 
     for(int i = 0; i < HASH_DIM; i++) {
         if(hashTable[i] != NULL) {
-            printf("ELEMENTO IN POS %d\n", i);
-            printf("DISTANZA: %d\n", hashTable[i]->distance);
-            printf("PARCO AUTO:\n");
-            inOrderBST(hashTable[i]->veichles);
+            bucket* curr = hashTable[i];
+            while(curr != NULL) {
+                // printf("ELEMENTO IN POS %d\n", i);
+                printf("%d", curr->distance);
+                // printf("PARCO AUTO:\n");
+                // inOrderBST(curr->veichles);
+                printf(" - MAX_A: %d\n", curr->maxAutonomy);
+                curr = (bucket*) curr->next;
+            }
         }
     }
     return;
