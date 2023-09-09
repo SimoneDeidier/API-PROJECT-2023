@@ -60,3 +60,4 @@ src/test/*
 src/test/**
 out.txt
 src/main
+src/forValgrind

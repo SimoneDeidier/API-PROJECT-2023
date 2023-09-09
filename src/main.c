@@ -38,14 +38,6 @@
 
 #define MAX_INT 2147483647
 
-#define DEBUG 0
-#define MALLOC 0
-#define STAMPA_STRUTTURE 0
-#define PPTEST 0
-#define CHECK_PREV 0
-#define TEST 0
-#define DA 0
-
 typedef struct {
 
     struct leaf* left;
@@ -95,16 +87,13 @@ int getMaxAutonomyFromDistance(int, bucket**, int);
 leaf* previousInBST(leaf*);
 void printPianificaPercorso(int*, int);
 void printIntStdoutOptimized(int);
-void dijkstraForward(int, leaf*, int, bucket**, int**, int*, int*);
+void dijkstraForward(int, leaf*, int, bucket**, int**, int*, int*, int);
 void enqueueWithPrio(queueElement**, queueElement*);
 queueElement* removeMinFromQueue(queueElement**);
-queueElement* searchInQueue(queueElement*, leaf*);
-void dijkstraBackwards(int, leaf*, int, bucket**, int**, int*, int*);
-
-// DEBUG FUNC
-void inOrderBST(leaf*);
-void printHashValues(bucket**);
-void printQueue(queueElement*);
+void dijkstraBackwards(int, leaf*, int, bucket**, int**, int*, int*, int);
+void freeHashTable(bucket**, int);
+void freeHTList(bucket*);
+void freeQueueVector(queueElement**, int);
 
 // const for hash values calc
 const int molt = (uint32_t)((double)A * ((uint64_t)(1) << 32));
@@ -118,6 +107,7 @@ int main() {
     bucket* hashtable[HASH_DIM];
     int* output = NULL;
     int num_stations = 0;
+    int max_station = 0;
 
     // initialize hash table
     for(int i = 0; i < HASH_DIM; i++) {
@@ -126,61 +116,36 @@ int main() {
     // start reading from stdin
     do{
         if(!readCommand(&command)) {    // check if the input file is empty
-            #if STAMPA_STRUTTURE
-                printf("BST DISTANZE:\n");
-                inOrderBST(distanceBst);
-                printHashValues(hashtable);
-            #endif
-            // TODO deallocare tutto!
             free(command);  // free all the allocated pointers
             free(commandArguments);
+            freeBST(distanceBst);
+            freeHashTable(hashtable, HASH_DIM);
             end = 1;    // set flag to close software
-            #if DEBUG
-                printf("CHIUSURA SOFTWARE\n");
-            #endif
         }
         else {
             if(stringCompare(command, AGG_STAZ, AGG_STAZ_DIM)) {    // check what type of command
-                #if DEBUG
-                    printf("Aggiungi stazione!\n");
-                #endif
                 readAggiungiStazioneParameters(&commandArguments);  // read arguments for aggiungi-stazione
-                #if DEBUG
-                    printf("DISTANCE: %d\n", commandArguments[0]);
-                    printf("# VEICHLES: %d\n", commandArguments[1]);
-                    if(commandArguments[1] > 0) {
-                        for(int i = 2; i < commandArguments[1] + 2; i++) {
-                            printf("VEICHLE %d AUTONOMY: %d\n", i-1, commandArguments[i]);
-                        }
-                    }
-                #endif
+                if(commandArguments[0] > max_station) {
+                    max_station = commandArguments[0];
+                }
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);    // check if already exist a station
-                #if DEBUG
-                    printf("END SEARCH IN BST!\n");
-                    if(found == NIL) {
-                        printf("FOUND = NIL\n");
-                    }
-                    else {
-                        printf("FOUND DIST. = %d", found->key);
-                    }
-                #endif
                 if(found == NIL) {
-                    #if DEBUG
-                        printf("ADDED STATION!\n");
-                    #endif
                     leaf* distanceLeaf = (leaf*) malloc(sizeof(leaf));  // if not found add it to the stations BST
                     distanceLeaf->key = commandArguments[0];
-                    #if DA
-                        printf("AGGIUNGO NEL BST LA STAZIONE %d\n", distanceLeaf->key);
-                    #endif
+                    distanceLeaf->left = NIL;
+                    distanceLeaf->right = NIL;
                     insertInBST(&distanceBst, distanceLeaf);
                     bucket* hashTableElement = (bucket*) malloc(sizeof(bucket));    // and add his veichles into hash table
                     hashTableElement->distance = commandArguments[0];
                     hashTableElement->maxAutonomy = 0;
+                    hashTableElement->veichles = NIL;
+                    hashTableElement->next = NULL;
                     if(commandArguments[1] > 0) {
                         for(int i = 2; i < commandArguments[1] + 2; i++) {
                             leaf* veichleLeaf = (leaf*) malloc(sizeof(leaf));
                             veichleLeaf->key = commandArguments[i];
+                            veichleLeaf->left = NIL;
+                            veichleLeaf->right = NIL;
                             insertInBST(&(hashTableElement->veichles), veichleLeaf);
                             if(commandArguments[i] > hashTableElement->maxAutonomy) {
                                 hashTableElement->maxAutonomy = commandArguments[i];
@@ -190,21 +155,12 @@ int main() {
                     insertInHashTable(hashtable, hashTableElement, hashFunction(commandArguments[0]));
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
                     num_stations++;
-                    #if DA
-                        inOrderBST(distanceBst);
-                    #endif
                 }
                 else {
-                    #if DEBUG
-                        printf("NOT ADDED STATION!\n");
-                    #endif
                     printStdoutOptimized(NON_AGGI, NON_AGGI_DIM);    // if already exist, print non aggiunta
                 }
             }
             else if(stringCompare(command, DEM_STAZ, DEM_STAZ_DIM)) {
-                #if DEBUG
-                    printf("Demolisci stazione!\n");
-                #endif 
                 int toDemolish = readDemolisciStazioneParameter();
                 leaf* found = searchInBST(distanceBst, toDemolish);
                 if(found != NULL) {
@@ -218,14 +174,14 @@ int main() {
                 }
             }
             else if(stringCompare(command, AGG_AUTO, AGG_AUTO_DIM)) {
-                #if DEBUG
-                    printf("Aggiungi auto!\n");
-                #endif
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
                     leaf* veichleToAdd = malloc(sizeof(leaf));
                     veichleToAdd->key = commandArguments[1];
+                    veichleToAdd->p = NULL;
+                    veichleToAdd->left = NULL;
+                    veichleToAdd->right = NULL;
                     addVeichle(hashtable, hashFunction(commandArguments[0]), veichleToAdd, commandArguments[0]);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);
                 }
@@ -234,9 +190,6 @@ int main() {
                 }
             }
             else if(stringCompare(command, ROT_AUTO, ROT_AUTO_DIM)) {
-                #if DEBUG
-                    printf("Rottama auto!\n");
-                #endif
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
@@ -252,39 +205,17 @@ int main() {
                 }
             }
             else if(stringCompare(command, PIA_PERC, PIA_PERC_DIM)) {
-                #if DEBUG
-                    printf("Pianifica percorso!\n");
-                #endif
                 readTwoIntegerParameters(&commandArguments);
-                #if DEBUG
-                    printf("pianifica-percorso %d %d\n", commandArguments[0], commandArguments[1]);
-                    printHashValues(hashtable);
-                #endif
                 if(commandArguments[0] == commandArguments[1]) {
                     printIntStdoutOptimized(commandArguments[0]);
                     putchar_unlocked('\n');
                 }
                 else if(commandArguments[0] < commandArguments[1]) {
-                    #if DEBUG
-                        printf("PIANIFICA PERCORSO ANDATA\n");
-                    #endif
                     leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
-                    #if DA
-                        printf("PP %d -> %d\n", commandArguments[0], commandArguments[1]);
-                    #endif
-                    #if DEBUG
-                        printf("STAZIONE START TROVATA\n");
-                    #endif
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
-                    #if DA
-                        printf("FUNZIONE PIANIFICA PERCORSO FORWARD\n");
-                        printf("\n\n\n");
-                        inOrderBST(distanceBst);
-                        printf("\n\n\n");
-                    #endif
-                    dijkstraForward(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist);
+                    dijkstraForward(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist, max_station+1);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
@@ -295,20 +226,11 @@ int main() {
                     free(output);
                 }
                 else {
-                    #if DEBUG
-                        printf("PIANIFICA PERCORSO RITORNO\n");
-                    #endif
                     leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
-                    #if DEBUG
-                        printf("STAZIONE START TROVATA\n");
-                    #endif
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
-                    #if DEBUG
-                        printf("FUNZIONE PIANIFICA PERCORSO BACKWARDS\n");
-                    #endif
-                    dijkstraBackwards(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist);
+                    dijkstraBackwards(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist, max_station+1);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
@@ -320,9 +242,6 @@ int main() {
                 }
             }
             else {
-                #if DEBUG
-                    printf("Errore nella lettura di un comando!\n");
-                #endif
             }
         }
     }while(!end);
@@ -342,23 +261,14 @@ int readCommand(char** cmd) {   // read command from stdin
         else if(read != ' ') {
             if(count == 0) {    // if first char readed allocate memory
                 if(*cmd != NULL) {
-                    #if MALLOC
-                        printf("STO DEALLOCANDO\n");
-                    #endif
                     free(*cmd);
                 }
-                #if MALLOC
-                    printf("STO MALLOCANDO\n");
-                #endif
                 (*cmd) = (char*) malloc(sizeof(char) * MAX_CMD);
             }
             (*cmd)[count] = read;   // save readed char
             count++;
         }
     } while(read != ' ');   // stop when read a space
-    #if DEBUG
-        printf("COMANDO LETTO: %s\n", (*cmd));
-    #endif
     return 1;
 }
 
@@ -383,30 +293,18 @@ void readAggiungiStazioneParameters(int** vector) { // read all the parameters o
             distance = distance*10 + read - '0';
         }
     }while(read != ' ');
-    #if DEBUG
-        printf("DISTANCE READ!\n");
-    #endif
     do{ // read from stdin # of veichles
         read = getchar_unlocked();
         if(read != ' ' && read != '\n' && read != EOF) {
             size = size*10 + read - '0';
         }
     }while(read != ' ' && read != '\n' && read != EOF);
-    #if DEBUG
-        printf("SIZE READ, %d!\n", size);
-    #endif
     if(*vector != NULL) {
         free(*vector);
     }
-    #if DEBUG
-        printf("POST FREE!\n");
-    #endif
     (*vector) = (int*) malloc(sizeof(int) * (size + 2));    // allocate memory
     (*vector)[0] = distance;    // save as first value # veichles
     (*vector)[1] = size;
-    #if DEBUG
-        printf("ALLOCATED VECTOR AND ASSIGNED VALUES!\n");
-    #endif
     if(size > 0) {
         for(int i = 2; i < size + 2; i++) { // read all veichle values from stdin
             read = '\0';
@@ -425,35 +323,18 @@ void readAggiungiStazioneParameters(int** vector) { // read all the parameters o
 
 void insertInBST(leaf** T, leaf* x) {   // insert value into a BST
 
-    #if DA
-        printf("DEVO INSERIRE IL VALORE %d\n", x->key);
-    #endif
     leaf* pre = NIL;
     leaf* cur = (*T);
 
     while(cur != NIL) {
         pre = cur;
-        #if DA
-            printf("ORA CHECK SU %d\n", cur->key);
-        #endif
         if(x->key < cur->key) {
-            #if DA
-                printf("X PIU' PICCOLO\n");
-            #endif
             cur = (leaf*) cur->left;
         }
         else {
-            #if DA
-                printf("X PIU' GRANDE\n");
-            #endif
             cur = (leaf*) cur->right;
         }
     }
-    #if DA
-        if(pre != NULL) {
-            printf("PADRE DI %d: %d\n", x->key, pre->key);
-        }
-    #endif
     x->p = (struct leaf*) pre;
     if(pre == NIL) {
         (*T) = x;
@@ -464,15 +345,13 @@ void insertInBST(leaf** T, leaf* x) {   // insert value into a BST
     else {
         pre->right = (struct leaf*) x;
     }
+    
     return;
 }
 
 leaf* searchInBST(leaf* T, int x) { // search for value in BST
 
-    #if DEBUG
-        printf("CERCANDO NEL BST LA STAZIONE CON DISTANZA: %d\n", x);
-    #endif
-    if(T == NIL || T->key == x) {
+    if(T == NIL || (T != NIL && T->key == x)) {
         return T;
     }
     if(T->key < x) {
@@ -496,10 +375,6 @@ void printStdoutOptimized(char* str, int dim) {
 
 int hashFunction(int k) {   // calc of hash function
 
-    #if DEBUG
-    int h = (k * molt) % HASH_DIM;
-        printf("CALCOLO HASH PER %d -> %d\n", k, h);
-    #endif
     return abs(k * molt) % HASH_DIM;
 
 }
@@ -512,13 +387,7 @@ int abs(int x) {
 
 void insertInHashTable(bucket** hashTable, bucket* element, int pos) {
 
-    #if DEBUG 
-        printf("AGGIUNGO ELEMENTO IN POS %d\n", pos);
-    #endif
     if(hashTable[pos] != NULL) {    // if element already exist, add it to the head of the list
-        #if DEBUG
-            printf("ELEMENTO GIA' PRESENTE NELLA POSIZIONE, LO AGGIUNGO ALLA LISTA");
-        #endif
         element->next = (struct bucket*) hashTable[pos];
     }
     hashTable[pos] = element;
@@ -624,11 +493,6 @@ leaf* minInBST(leaf* T) {   // search for element with min key in BST
     leaf* curr = T;
 
     while(curr->left != NIL) {
-        #if DA
-            printf("SONO %d\n", curr->key);
-            leaf* test = (leaf*) curr->left;
-            printf("FIGLIO LEFT: %d\n", test->key);
-        #endif
         curr = (leaf*) curr->left;
     }
     return curr;
@@ -640,13 +504,7 @@ leaf* nextInBST(leaf* x) {  // search element with next value of the key in BST
     leaf* y = NIL;
 
     if(x->right != NIL) {
-        #if DA
-            printf("X-RIGHT\n");
-        #endif
         return minInBST((leaf*) x->right);
-        #if DA
-            printf("POST MIN BST\n");
-        #endif
     }
     y = (leaf*) x->p;
     while(y != NIL && (leaf*) y->right == x) {
@@ -795,30 +653,27 @@ void printPianificaPercorso(int* stations, int count) {
 
 }
 
-void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist) {
+void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
 
-    #if DA
-        printf("DIJKSTRA\n");
-    #endif
     queueElement* Q = NULL;
     leaf* v = s;
+    queueElement** leavesToQueueElements = malloc(sizeof(queueElement*) * maxDim);
+    for(int i = 0; i < maxDim; i++) {
+        leavesToQueueElements[i] = NULL;
+    }
     while(v->key <= dest) {
-        #if DA
-            printf("INSERISCO IN CODA %d\n", v->key);
-        #endif
-        queueElement* el = (queueElement*) malloc(sizeof(queueElement));
-        el->element = v;
+        leavesToQueueElements[v->key] = (queueElement*) malloc(sizeof(queueElement));
+        leavesToQueueElements[v->key]->element = v;
+        leavesToQueueElements[v->key]->next = NULL;
         if(v == s) {
-            el->distance = 0;
+            leavesToQueueElements[v->key]->distance = 0;
+            leavesToQueueElements[v->key]->previous = NULL;
         } 
         else {
-            el->distance = MAX_INT;
-            el->previous = NULL;
+            leavesToQueueElements[v->key]->distance = MAX_INT;
+            leavesToQueueElements[v->key]->previous = NULL;
         }
-        enqueueWithPrio(&Q, el);
-        #if DA
-            printf("CORRETTAMENTE ACCODATO\n");
-        #endif
+        enqueueWithPrio(&Q, leavesToQueueElements[v->key]);
         if(v->key != dest) {
             v = nextInBST(v);
         }
@@ -826,37 +681,20 @@ void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int**
             break;
         }
     }
-    #if DA
-        printf("FINE INSERIMENTO IN CODA\n");
-        printQueue(Q);
-    #endif
-    #if DA
-        printf(" - START DIJKSTRA\n");
-    #endif
     while(Q != NULL) {
         queueElement* u = removeMinFromQueue(&Q);
         int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
-        #if DA
-            printf(" * RIMOSSO MIN: %d - %d\n", u->element->key, u->distance);
-            printQueue(Q);
-        #endif
         v = nextInBST(u->element);
         if(v->key > u->element->key + uMaxAutonomy) {
+            freeQueueVector(leavesToQueueElements, maxDim);
             return;
         }
         while(v->key <= u->element->key + uMaxAutonomy && v->key <= dest) {
-            #if DA
-                printf("SUCCESSIVO DI %d, AUTONOMIA %d: %d\n", u->element->key, uMaxAutonomy, v->key);
-            #endif
             int ndist = u->distance + 1;
-            queueElement* vQEl = searchInQueue(Q, v);
+            queueElement* vQEl = leavesToQueueElements[v->key];
             if(vQEl != NULL && vQEl->distance > ndist ) {
                 vQEl->distance = ndist;
                 vQEl->previous = (struct queueElement*) u;
-                #if DA
-                    printf("CODA AGGIORNATA!\n");
-                    printQueue(Q);
-                #endif
             }
             if(v->key != dest) {
                 v = nextInBST(v);
@@ -870,13 +708,11 @@ void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int**
                     x = (queueElement*) x->previous;
                     *count += 1;
                 }while(x != NULL);
+                freeQueueVector(leavesToQueueElements, maxDim);
                 return;
             }
         }
     }
-    #if DA
-        printf("CODA VUOTA!");
-    #endif
 
 }
 
@@ -954,27 +790,27 @@ queueElement* searchInQueue(queueElement* Q, leaf* q) {
 
 }
 
-void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist) {
+void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
 
-    #if DA
-        printf("DIJKSTRA\n");
-    #endif
     queueElement* Q = NULL;
     leaf* v = s;
+    queueElement** leavesToQueueElements = malloc(sizeof(queueElement*) * maxDim);
+    for(int i = 0; i < maxDim; i++) {
+        leavesToQueueElements[i] = NULL;
+    }
     while(v->key >= dest) {
-        #if DA
-            printf("INSERISCO IN CODA %d\n", v->key);
-        #endif
-        queueElement* el = (queueElement*) malloc(sizeof(queueElement));
-        el->element = v;
+        leavesToQueueElements[v->key] = (queueElement*) malloc(sizeof(queueElement));
+        leavesToQueueElements[v->key]->element = v;
+        leavesToQueueElements[v->key]->next = NULL;
         if(v == s) {
-            el->distance = 0;
+            leavesToQueueElements[v->key]->distance = 0;
+            leavesToQueueElements[v->key]->previous = NULL;
         } 
         else {
-            el->distance = MAX_INT;
-            el->previous = NULL;
+            leavesToQueueElements[v->key]->distance = MAX_INT;
+            leavesToQueueElements[v->key]->previous = NULL;
         }
-        enqueueWithPrio(&Q, el);
+        enqueueWithPrio(&Q, leavesToQueueElements[v->key]);
         if(v->key != dest) {
             v = previousInBST(v);
         }
@@ -982,37 +818,20 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int
             break;
         }
     }
-    #if DA
-        printf("FINE INSERIMENTO IN CODA\n");
-        printQueue(Q);
-    #endif
-    #if DA
-        printf(" - START DIJKSTRA\n");
-    #endif
     while(Q != NULL) {
         queueElement* u = removeMinFromQueue(&Q);
         int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
-        #if DA
-            printf(" * RIMOSSO MIN: %d - %d\n", u->element->key, u->distance);
-            printQueue(Q);
-        #endif
         v = previousInBST(u->element);
         if(v->key < u->element->key - uMaxAutonomy) {
+            freeQueueVector(leavesToQueueElements, maxDim);
             return;
         }
         while(v->key >= u->element->key - uMaxAutonomy && v->key >= dest) {
-            #if DA
-                printf("SUCCESSIVO DI %d, AUTONOMIA %d: %d\n", u->element->key, uMaxAutonomy, v->key);
-            #endif
             int ndist = u->distance + 1;
-            queueElement* vQEl = searchInQueue(Q, v);
+            queueElement* vQEl = leavesToQueueElements[v->key];
             if(vQEl != NULL && vQEl->distance > ndist ) {
                 vQEl->distance = ndist;
                 vQEl->previous = (struct queueElement*) u;
-                #if DA
-                    printf("CODA AGGIORNATA!\n");
-                    printQueue(Q);
-                #endif
             }
             if(v->key != dest) {
                 v = previousInBST(v);
@@ -1026,57 +845,54 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int
                     x = (queueElement*) x->previous;
                     *count += 1;
                 }while(x != NULL);
+                freeQueueVector(leavesToQueueElements, maxDim);
                 return;
             }
         }
     }
-    #if DA
-        printf("CODA VUOTA!");
-    #endif  
 
 }
 
-// ********* DEBUG FUNCTIONS *********
+void freeQueue(queueElement* Q) {
 
-void inOrderBST(leaf* T) {
-
-    if(T->left != NIL) {
-        inOrderBST((leaf*) T->left);
+    if(Q->next != NULL) {
+        freeQueue((queueElement*) Q->next);
     }
-    printf("%d\n", T->key);
-    if(T->right != NIL) {
-        inOrderBST((leaf*) T->right);
-    }
+    free(Q);
     return;
 
 }
 
-void printHashValues(bucket** hashTable) {
+void freeHashTable(bucket** hashTable, int dim) {
 
-    for(int i = 0; i < HASH_DIM; i++) {
+    for(int i = 0; i < dim; i++) {
         if(hashTable[i] != NULL) {
-            bucket* curr = hashTable[i];
-            while(curr != NULL) {
-                // printf("ELEMENTO IN POS %d\n", i);
-                printf("%d", curr->distance);
-                // printf("PARCO AUTO:\n");
-                // inOrderBST(curr->veichles);
-                printf(" - MAX_A: %d\n", curr->maxAutonomy);
-                curr = (bucket*) curr->next;
-            }
+            freeHTList(hashTable[i]);
         }
     }
     return;
 
 }
 
-void printQueue(queueElement* Q) {
+void freeHTList(bucket* element) {
 
-    queueElement* tmp = Q;
-    while(tmp != NULL) {
-        printf("ELEMENTO %d - DISTANCE %d\n", tmp->element->key, tmp->distance);
-        tmp = (queueElement*) tmp->next;
+    if(element->next != NULL) {
+        freeHTList((bucket*) element->next);
     }
+    freeBST(element->veichles);
+    free(element);
+    return;
+
+}
+
+void freeQueueVector(queueElement** Q, int dim) {
+
+    for(int i = 0; i < dim; i++) {
+        if(Q[i] != NULL) {
+            free(Q[i]);
+        }
+    }
+    free(Q);
     return;
 
 }
