@@ -43,6 +43,8 @@
 #define STAMPA_STRUTTURE 0
 #define PPTEST 0
 #define CHECK_PREV 0
+#define TEST 0
+#define DA 1
 
 typedef struct {
 
@@ -61,6 +63,15 @@ typedef struct {
     int maxAutonomy;
 
 }bucket;
+
+typedef struct {
+
+    leaf* element;
+    int distance;
+    struct queueElement* previous;
+    struct queueElement* next;
+
+}queueElement;
 
 int readCommand(char**);
 int stringCompare(char*, char*, int);
@@ -81,16 +92,21 @@ void addVeichle(bucket**, int, leaf*, int);
 int scrapVeichle(bucket**, int, int, int);
 leaf* maxInBST(leaf*);
 int getMaxAutonomyFromDistance(int, bucket**, int);
-int pianificaPercorsoForward(leaf*, int, int**, int, bucket**, int*);
-int pianificaPercorsoBackwards(leaf*, int, int**, int, bucket**, int*, leaf*);
+void pianificaPercorsoBackwards(leaf*, int, int**, int, bucket**, int*);
 leaf* previousInBST(leaf*);
-leaf* getMaxReachable(leaf*, bucket**, int, leaf*);
-void printPianificaPercorsoForward(int*, int, int);
+void printPianificaPercorso(int*, int);
+void printIntStdoutOptimized(int);
 
+void dijkstraForward(int, leaf*, int, bucket**, int**, int*, int*);
+void enqueueWithPrio(queueElement**, queueElement*);
+queueElement* removeMinFromQueue(queueElement**);
+queueElement* searchInQueue(queueElement*, leaf*);
+void dijkstraBackwards(int, leaf*, int, bucket**, int**, int*, int*);
 
 // DEBUG FUNC
 void inOrderBST(leaf*);
 void printHashValues(bucket**);
+void printQueue(queueElement*);
 
 // const for hash values calc
 const int molt = (uint32_t)((double)A * ((uint64_t)(1) << 32));
@@ -240,25 +256,33 @@ int main() {
                     printf("pianifica-percorso %d %d\n", commandArguments[0], commandArguments[1]);
                     printHashValues(hashtable);
                 #endif
-                if(commandArguments[0] < commandArguments[1]) {
+                if(commandArguments[0] == commandArguments[1]) {
+                    printIntStdoutOptimized(commandArguments[0]);
+                    putchar_unlocked('\n');
+                }
+                else if(commandArguments[0] < commandArguments[1]) {
                     #if DEBUG
                         printf("PIANIFICA PERCORSO ANDATA\n");
                     #endif
                     leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    #if DA
+                        printf("PP %d -> %d\n", commandArguments[0], commandArguments[1]);
+                    #endif
                     #if DEBUG
                         printf("STAZIONE START TROVATA\n");
                     #endif
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
+                    int count = 0;
                     #if DEBUG
                         printf("FUNZIONE PIANIFICA PERCORSO FORWARD\n");
                     #endif
-                    int pathDim = pianificaPercorsoForward(startLeaf, commandArguments[1], &output, 0, hashtable, &exist);
+                    dijkstraForward(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
                     else {
-                        printPianificaPercorsoForward(output, pathDim, commandArguments[0]);
+                        printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
                     free(output);
@@ -273,19 +297,16 @@ int main() {
                     #endif
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
+                    int count = 0;
                     #if DEBUG
                         printf("FUNZIONE PIANIFICA PERCORSO BACKWARDS\n");
                     #endif
-                    int pathDim = pianificaPercorsoBackwards(startLeaf, commandArguments[1], &output, 0, hashtable, &exist, distanceBst);
-                    printf("%d\n", pathDim);
+                    dijkstraBackwards(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
                     else {
-                        printf("MIN PATH: %d\n", pathDim);
-                        for(int i = 0; i < num_stations; i++) {
-                            printf("%d\n", output[i]);
-                        }
+                        printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
                     free(output);
@@ -680,161 +701,6 @@ int getMaxAutonomyFromDistance(int dist, bucket** hashTable, int hash) {
 
 }
 
-int pianificaPercorsoForward(leaf* curr, int dest, int** path, int size, bucket** hashTable, int* exist) {
-
-    #if DEBUG
-        printf("DISTANZA %d - %d\n", curr->key, dest);
-    #endif
-    if(curr->key == dest) {
-        *exist = 1;
-        return 0;
-    }
-
-    int currAutonomy = getMaxAutonomyFromDistance(curr->key, hashTable, hashFunction(curr->key));
-    #if PPTEST
-        printf("MAX_A @ %d: %d\n", curr->key, currAutonomy);
-    #endif
-    leaf* next = nextInBST(curr);
-    int minDist = MAX_INT;
-    if(curr->key + currAutonomy < next->key) {
-        return minDist;
-    }
-    do {
-        #if PPTEST
-            printf("ADIACENTE A %d: %d\n", curr->key, next->key);
-        #endif
-        int dist = 1 + pianificaPercorsoForward(next, dest, path, size+1, hashTable, exist);
-        #if PPTEST
-            printf("DISTANCE %d - %d CON TAPPA %d: %d\n", curr->key, dest, next->key, dist);
-        #endif
-        if(dist < minDist) {
-            minDist = dist;
-            (*path)[size] = next->key;
-        }
-        next = nextInBST(next);
-    } while(next != NULL && curr->key + currAutonomy >= next->key && next->key <= dest);
-    #if PPTEST
-        printf("MIN DISTANCE %d - %d: %d\n", curr->key, dest, minDist);
-    #endif
-    return minDist;
-
-}
-
-int pianificaPercorsoBackwards(leaf* curr, int dest, int** path, int size, bucket** hashTable, int* exist, leaf* distanceBST) {
-
-    /*#if CHECK_PREV
-        leaf* x = curr;
-        do {
-            printf("SONO %d\n", x->key);
-            x = previousInBST(x);
-        }while(x != NULL);
-        return 0;
-    #endif
-
-    #if PPTEST
-        printf("DISTANZA %d - %d\n", curr->key, dest);
-    #endif*/
-    if(curr->key == dest) {
-        *exist = 1;
-        return 0;
-    }
-
-    /*int currAutonomy = getMaxAutonomyFromDistance(curr->key, hashTable, hashFunction(curr->key));
-    leaf* next = curr;
-    leaf* previous = previousInBST(curr);
-    int minDist = MAX_INT;
-    if(curr->key - currAutonomy > previous->key) {
-        return minDist;
-    }
-    while(previous != NULL && curr->key - currAutonomy <= previous->key && previous->key >= dest) {
-        next = previous;
-        previous = previousInBST(next);
-    }
-    do {
-        #if PPTEST
-            if(previous != NULL) {
-                printf("ADIACENTE A %d: %d\n(NEXT: %d)\n", curr->key, next->key, previous->key);
-            }
-            else {
-                printf("ADIACENTE A %d: %d\n", curr->key, next->key);
-            }
-        #endif
-        int dist = 1 + pianificaPercorsoBackwards(next, dest, path, size+1, hashTable, exist);
-        #if PPTEST
-            printf("DISTANCE %d - %d CON TAPPA %d: %d\n", curr->key, dest, next->key, dist);
-        #endif
-        if(dist < minDist) {
-            #if PPTEST
-                printf("HO TROVATO UN PATH MINIMO TRA %d E %d: VALORE %d\n", curr->key, dest, dist);
-            #endif
-            minDist = dist;
-            (*path)[size] = next->key;
-            #if PPTEST
-                printf("HO SCRITTO %d IN POS %d\n", next->key, size);
-            #endif
-        }
-        next = nextInBST(next);
-    } while(next != NULL && next->key < curr->key);
-    #if PPTEST
-        printf("MIN DISTANCE %d - %d: %d\n", curr->key, dest, minDist);
-    #endif
-    return minDist;
-    int minDist = MAX_INT;
-    leaf* maxReachable = getMaxReachable(curr, hashTable, dest, distanceBST);
-
-    if(maxReachable->key == curr->key) {
-        return minDist;
-    }
-    do {
-        int dist = 1 + pianificaPercorsoBackwards(maxReachable, dest, path, size+1, hashTable, exist, distanceBST);
-        if(dist < minDist) {
-            minDist = dist;
-            (*path)[size] = maxReachable->key;
-        }
-        #if PPTEST
-            printf("FINITO DI CONTROLLARE %d\n", maxReachable->key);
-        #endif
-        maxReachable = nextInBST(maxReachable);
-        #if PPTEST
-            printf("ORA CONTROLLO %d\n", maxReachable->key);
-        #endif
-    }while(maxReachable->key != curr->key);
-    return minDist;*/
-
-    leaf* cursor = curr;
-    int minDistance = MAX_INT;
-    int distance = 0;
-    do {
-        #if PPTEST
-            printf("START CHECK SU: %d\n", cursor->key);
-        #endif
-        int maxAutonomy = getMaxAutonomyFromDistance(cursor->key, hashTable, hashFunction(cursor->key));
-        if(cursor->key - maxAutonomy <= dest) {
-            #if PPTEST
-                printf("%d PUO' RAGGIUNGERE %d, AUTONOMIA: %d\n", cursor->key, dest, maxAutonomy);
-            #endif
-            distance = 1 + pianificaPercorsoBackwards(curr, cursor->key, path, size+1, hashTable, exist, distanceBST);
-            if(distance < minDistance || (distance == minDistance && cursor->key < (*path)[size])) {
-                minDistance = distance;
-                (*path)[size] = cursor->key;
-                #if PPTEST
-                    printf("NUOVO PERCORSO MIGLIORE:\n");
-                    for(int i = 0; i < size+1; i++) {
-                        printf("%d - ", (*path)[i]);
-                    }
-                    printf("\n");
-                #endif
-            }
-        }
-        #if PPTEST
-            printf("END CHECK SU: %d\n", cursor->key);
-        #endif
-        cursor = previousInBST(cursor);
-    }while(cursor->key != dest);
-    return minDistance;
-
-}
-
 leaf* previousInBST(leaf* x) {  // search element with next value of the key in BST
 
     leaf* y = NIL;
@@ -848,34 +714,6 @@ leaf* previousInBST(leaf* x) {  // search element with next value of the key in 
         y = (leaf*) y->p;
     }
     return y;
-
-}
-
-leaf* getMaxReachable(leaf* curr, bucket** hashtable, int dest, leaf* T) {
-
-    int autonomy = getMaxAutonomyFromDistance(curr->key, hashtable, hashFunction(curr->key));
-    int maxReachable = curr->key - autonomy;
-
-    #if PPTEST
-        printf("MAX REACHABLE DA %d CON AUTONOMIA %d\n", curr->key, autonomy);
-        printf("MAX REACHABLE: %d\n", maxReachable);
-    #endif
-    if(maxReachable <= 0) {
-        return searchInBST(T, dest);
-    }
-    leaf* res = curr;
-    leaf* prev = NULL;
-    while(res->key >= maxReachable) {
-        prev = res;
-        res = previousInBST(res);
-        #if PPTEST
-            printf("RES: %d\n", res->key);
-        #endif
-    }
-    #if PPTEST
-        printf("RITORNO: %d\n", prev->key);
-    #endif
-    return prev;
 
 }
 
@@ -906,14 +744,256 @@ void printIntStdoutOptimized(int x) {
 
 }
 
-void printPianificaPercorsoForward(int* stations, int dim, int start) {
+void printPianificaPercorso(int* stations, int count) {
 
-    printIntStdoutOptimized(start);
-    for(int i = 0; i < dim; i++) {
-        putchar_unlocked(' ');
+    for(int i = count - 1; i >= 0; i--) {
         printIntStdoutOptimized(stations[i]);
+        if(i != 0) {
+            putchar_unlocked(' ');
+        }
+        else {
+            putchar_unlocked('\n');
+        }
     }
     return;
+
+}
+
+void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist) {
+
+    #if DA
+        printf("DIJKSTRA\n");
+    #endif
+    queueElement* Q = NULL;
+    leaf* v = s;
+    while(v->key <= dest) {
+        #if DA
+            printf("INSERISCO IN CODA %d\n", v->key);
+        #endif
+        queueElement* el = (queueElement*) malloc(sizeof(queueElement));
+        el->element = v;
+        if(v == s) {
+            el->distance = 0;
+        } 
+        else {
+            el->distance = MAX_INT;
+            el->previous = NULL;
+        }
+        enqueueWithPrio(&Q, el);
+        if(v->key != dest) {
+            v = nextInBST(v);
+        }
+        else {
+            break;
+        }
+    }
+    #if DA
+        printf("FINE INSERIMENTO IN CODA\n");
+        printQueue(Q);
+    #endif
+    #if DA
+        printf(" - START DIJKSTRA\n");
+    #endif
+    while(Q != NULL) {
+        queueElement* u = removeMinFromQueue(&Q);
+        int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
+        #if DA
+            printf(" * RIMOSSO MIN: %d - %d\n", u->element->key, u->distance);
+            printQueue(Q);
+        #endif
+        v = nextInBST(u->element);
+        if(v->key > u->element->key + uMaxAutonomy) {
+            return;
+        }
+        while(v->key <= u->element->key + uMaxAutonomy && v->key <= dest) {
+            #if DA
+                printf("SUCCESSIVO DI %d, AUTONOMIA %d: %d\n", u->element->key, uMaxAutonomy, v->key);
+            #endif
+            int ndist = u->distance + 1;
+            queueElement* vQEl = searchInQueue(Q, v);
+            if(vQEl != NULL && vQEl->distance > ndist ) {
+                vQEl->distance = ndist;
+                vQEl->previous = (struct queueElement*) u;
+                #if DA
+                    printf("CODA AGGIORNATA!\n");
+                    printQueue(Q);
+                #endif
+            }
+            if(v->key != dest) {
+                v = nextInBST(v);
+            }
+            else {
+                // SONO ARRIVATO A DESTINAZIONE
+                *exist = 1;
+                queueElement* x = vQEl;
+                do {
+                    (*out)[*count] = x->element->key;
+                    x = (queueElement*) x->previous;
+                    *count += 1;
+                }while(x != NULL);
+                return;
+            }
+        }
+    }
+    #if DA
+        printf("CODA VUOTA!");
+    #endif
+
+}
+
+void enqueueWithPrio(queueElement** Q, queueElement* v)  {
+
+    if(*Q == NULL) {
+        *Q = v;
+    }
+    else {
+        queueElement* curr = *Q;
+        queueElement* prev = NULL;
+        while(curr->next != NULL) {
+            if(curr->distance >= v->distance) {
+                prev->next = (struct queueElement*) v;
+                v->next = (struct queueElement*) curr;
+                return;
+            }
+            prev = curr;
+            curr = (queueElement*) curr->next;
+        }
+        curr->next = (struct queueElement*) v; 
+    }
+    return;
+
+}
+
+queueElement* removeMinFromQueue(queueElement** Q) {
+
+    queueElement* curr = *Q;
+    queueElement* pred = NULL;
+    queueElement* min = NULL;
+    queueElement* predMin = NULL;
+
+    if((*Q)->next == NULL) {
+        min = *Q;
+        *Q = NULL;
+        return min;
+    }
+
+    while(curr != NULL) {
+        if(min == NULL) {
+            min = curr;
+        }
+        else if(curr->distance < min->distance) {
+            min = curr;
+            predMin = pred;
+        }
+        else if(curr->distance == min->distance && curr->element->key < min->element->key) {
+            min = curr;
+            predMin = pred;
+        }
+        pred = curr;
+        curr = (queueElement*) curr->next;
+    }
+    if(predMin == NULL) {
+        *Q = (queueElement*) min->next;
+    }
+    else {
+        predMin->next = min->next;
+    }
+    return min;
+
+}
+
+queueElement* searchInQueue(queueElement* Q, leaf* q) {
+
+    queueElement* tmp = Q;
+    while(tmp->element != q) {
+        if(tmp->element != q && tmp->next == NULL) {
+            return NULL;
+        }
+        tmp = (queueElement*) tmp->next;
+    }
+    return tmp;
+
+}
+
+void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist) {
+
+    #if DA
+        printf("DIJKSTRA\n");
+    #endif
+    queueElement* Q = NULL;
+    leaf* v = s;
+    while(v->key >= dest) {
+        #if DA
+            printf("INSERISCO IN CODA %d\n", v->key);
+        #endif
+        queueElement* el = (queueElement*) malloc(sizeof(queueElement));
+        el->element = v;
+        if(v == s) {
+            el->distance = 0;
+        } 
+        else {
+            el->distance = MAX_INT;
+            el->previous = NULL;
+        }
+        enqueueWithPrio(&Q, el);
+        if(v->key != dest) {
+            v = previousInBST(v);
+        }
+        else {
+            break;
+        }
+    }
+    #if DA
+        printf("FINE INSERIMENTO IN CODA\n");
+        printQueue(Q);
+    #endif
+    #if DA
+        printf(" - START DIJKSTRA\n");
+    #endif
+    while(Q != NULL) {
+        queueElement* u = removeMinFromQueue(&Q);
+        int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
+        #if DA
+            printf(" * RIMOSSO MIN: %d - %d\n", u->element->key, u->distance);
+            printQueue(Q);
+        #endif
+        v = previousInBST(u->element);
+        if(v->key < u->element->key - uMaxAutonomy) {
+            return;
+        }
+        while(v->key >= u->element->key - uMaxAutonomy && v->key >= dest) {
+            #if DA
+                printf("SUCCESSIVO DI %d, AUTONOMIA %d: %d\n", u->element->key, uMaxAutonomy, v->key);
+            #endif
+            int ndist = u->distance + 1;
+            queueElement* vQEl = searchInQueue(Q, v);
+            if(vQEl != NULL && vQEl->distance > ndist ) {
+                vQEl->distance = ndist;
+                vQEl->previous = (struct queueElement*) u;
+                #if DA
+                    printf("CODA AGGIORNATA!\n");
+                    printQueue(Q);
+                #endif
+            }
+            if(v->key != dest) {
+                v = previousInBST(v);
+            }
+            else {
+                // SONO ARRIVATO A DESTINAZIONE
+                *exist = 1;
+                queueElement* x = vQEl;
+                do {
+                    (*out)[*count] = x->element->key;
+                    x = (queueElement*) x->previous;
+                    *count += 1;
+                }while(x != NULL);
+                return;
+            }
+        }
+    }
+    #if DA
+        printf("CODA VUOTA!");
+    #endif  
 
 }
 
@@ -946,6 +1026,17 @@ void printHashValues(bucket** hashTable) {
                 curr = (bucket*) curr->next;
             }
         }
+    }
+    return;
+
+}
+
+void printQueue(queueElement* Q) {
+
+    queueElement* tmp = Q;
+    while(tmp != NULL) {
+        printf("ELEMENTO %d - DISTANCE %d\n", tmp->element->key, tmp->distance);
+        tmp = (queueElement*) tmp->next;
     }
     return;
 
