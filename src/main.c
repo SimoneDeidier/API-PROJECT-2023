@@ -146,6 +146,7 @@ int main() {
                             veichleLeaf->key = commandArguments[i];
                             veichleLeaf->left = NIL;
                             veichleLeaf->right = NIL;
+                            veichleLeaf->p = NIL;
                             insertInBST(&(hashTableElement->veichles), veichleLeaf);
                             if(commandArguments[i] > hashTableElement->maxAutonomy) {
                                 hashTableElement->maxAutonomy = commandArguments[i];
@@ -554,7 +555,7 @@ void addVeichle(bucket** hashTable, int hash, leaf* veichleToAdd, int distance) 
 
 int scrapVeichle(bucket** hashTable, int hash, int autonomy, int distance) {    // remove, if exists, an element from the BST
 
-    bucket* curr = hashTable[hash]; // statr from the head of the list
+    bucket* curr = hashTable[hash]; // start from the head of the list
 
     while(curr->distance != distance) {
         curr = (bucket*) curr->next;    // search for the bucket with the right distance
@@ -566,7 +567,10 @@ int scrapVeichle(bucket** hashTable, int hash, int autonomy, int distance) {    
     else {
         int toScrapAutonomy = toScrap->key;         // save the distance
         removeFromBST(&curr->veichles, toScrap);    // else remove it and return true
-        if(curr->maxAutonomy == toScrapAutonomy) {
+        if(curr->veichles == NULL) {
+            curr->maxAutonomy = 0;
+        }
+        else if(curr->maxAutonomy == toScrapAutonomy) {
             curr->maxAutonomy = maxInBST(curr->veichles)->key;
         }
         return 1;
