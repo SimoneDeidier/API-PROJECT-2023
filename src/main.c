@@ -44,7 +44,7 @@
 #define PPTEST 0
 #define CHECK_PREV 0
 #define TEST 0
-#define DA 1
+#define DA 0
 
 typedef struct {
 
@@ -92,11 +92,9 @@ void addVeichle(bucket**, int, leaf*, int);
 int scrapVeichle(bucket**, int, int, int);
 leaf* maxInBST(leaf*);
 int getMaxAutonomyFromDistance(int, bucket**, int);
-void pianificaPercorsoBackwards(leaf*, int, int**, int, bucket**, int*);
 leaf* previousInBST(leaf*);
 void printPianificaPercorso(int*, int);
 void printIntStdoutOptimized(int);
-
 void dijkstraForward(int, leaf*, int, bucket**, int**, int*, int*);
 void enqueueWithPrio(queueElement**, queueElement*);
 queueElement* removeMinFromQueue(queueElement**);
@@ -172,6 +170,9 @@ int main() {
                     #endif
                     leaf* distanceLeaf = (leaf*) malloc(sizeof(leaf));  // if not found add it to the stations BST
                     distanceLeaf->key = commandArguments[0];
+                    #if DA
+                        printf("AGGIUNGO NEL BST LA STAZIONE %d\n", distanceLeaf->key);
+                    #endif
                     insertInBST(&distanceBst, distanceLeaf);
                     bucket* hashTableElement = (bucket*) malloc(sizeof(bucket));    // and add his veichles into hash table
                     hashTableElement->distance = commandArguments[0];
@@ -189,6 +190,9 @@ int main() {
                     insertInHashTable(hashtable, hashTableElement, hashFunction(commandArguments[0]));
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
                     num_stations++;
+                    #if DA
+                        inOrderBST(distanceBst);
+                    #endif
                 }
                 else {
                     #if DEBUG
@@ -274,8 +278,11 @@ int main() {
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
-                    #if DEBUG
+                    #if DA
                         printf("FUNZIONE PIANIFICA PERCORSO FORWARD\n");
+                        printf("\n\n\n");
+                        inOrderBST(distanceBst);
+                        printf("\n\n\n");
                     #endif
                     dijkstraForward(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist);
                     if(!exist) {
@@ -417,18 +424,36 @@ void readAggiungiStazioneParameters(int** vector) { // read all the parameters o
 }
 
 void insertInBST(leaf** T, leaf* x) {   // insert value into a BST
+
+    #if DA
+        printf("DEVO INSERIRE IL VALORE %d\n", x->key);
+    #endif
     leaf* pre = NIL;
     leaf* cur = (*T);
 
     while(cur != NIL) {
         pre = cur;
+        #if DA
+            printf("ORA CHECK SU %d\n", cur->key);
+        #endif
         if(x->key < cur->key) {
+            #if DA
+                printf("X PIU' PICCOLO\n");
+            #endif
             cur = (leaf*) cur->left;
         }
         else {
+            #if DA
+                printf("X PIU' GRANDE\n");
+            #endif
             cur = (leaf*) cur->right;
         }
     }
+    #if DA
+        if(pre != NULL) {
+            printf("PADRE DI %d: %d\n", x->key, pre->key);
+        }
+    #endif
     x->p = (struct leaf*) pre;
     if(pre == NIL) {
         (*T) = x;
@@ -599,6 +624,11 @@ leaf* minInBST(leaf* T) {   // search for element with min key in BST
     leaf* curr = T;
 
     while(curr->left != NIL) {
+        #if DA
+            printf("SONO %d\n", curr->key);
+            leaf* test = (leaf*) curr->left;
+            printf("FIGLIO LEFT: %d\n", test->key);
+        #endif
         curr = (leaf*) curr->left;
     }
     return curr;
@@ -610,7 +640,13 @@ leaf* nextInBST(leaf* x) {  // search element with next value of the key in BST
     leaf* y = NIL;
 
     if(x->right != NIL) {
+        #if DA
+            printf("X-RIGHT\n");
+        #endif
         return minInBST((leaf*) x->right);
+        #if DA
+            printf("POST MIN BST\n");
+        #endif
     }
     y = (leaf*) x->p;
     while(y != NIL && (leaf*) y->right == x) {
@@ -780,6 +816,9 @@ void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int**
             el->previous = NULL;
         }
         enqueueWithPrio(&Q, el);
+        #if DA
+            printf("CORRETTAMENTE ACCODATO\n");
+        #endif
         if(v->key != dest) {
             v = nextInBST(v);
         }
