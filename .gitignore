@@ -54,6 +54,10 @@ dkms.conf
 # MacOS files
 .DS_Store
 
+# VSCode files
+.vscode/*
+.vscode/**
+
 # Test files
 test.*
 src/test/*
