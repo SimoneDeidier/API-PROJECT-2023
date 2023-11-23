@@ -31,6 +31,9 @@
 #define NON_ROTT_DIM 13
 #define NESS_PER_DIM 15
 
+#define HASH_DIM 1024 * 16
+#define A 0.6180339887498948482045868343656381177203091798057628621354486227
+
 #define N_AGGIUNGI_AUTO_PAR 2
 
 #define MAX_INT 2147483647
@@ -41,10 +44,17 @@ typedef struct {
     struct leaf* right;
     struct leaf* p;
     int key;
-    int maxAutonomy;
-    struct leaf* veichles;
 
 }leaf;
+
+typedef struct {
+
+    struct bucket* next;
+    int distance;
+    leaf* veichles;
+    int maxAutonomy;
+
+}bucket;
 
 typedef struct {
 
@@ -62,21 +72,31 @@ void insertInBST(leaf**, leaf*);
 leaf* searchInBST(leaf*, int);
 void printStdoutOptimized(char*, int);
 int hashFunction(int);
+void insertInHashTable(bucket**, bucket*, int);
 int readDemolisciStazioneParameter();
 void freeBST(leaf*);
+void removeFromHashTable(bucket**, int, int);
 void removeFromBST(leaf**, leaf*);
 leaf* nextInBST(leaf*);
 leaf* minInBST(leaf*);
 void readTwoIntegerParameters(int**);
-void addVeichle(leaf*, leaf*);
-int scrapVeichle(leaf*, int);
+void addVeichle(bucket**, int, leaf*, int);
+int scrapVeichle(bucket**, int, int, int);
 leaf* maxInBST(leaf*);
+int getMaxAutonomyFromDistance(int, bucket**, int);
 leaf* previousInBST(leaf*);
 void printPianificaPercorso(int*, int);
 void printIntStdoutOptimized(int);
+void dijkstraForward(int, leaf*, int, bucket**, int**, int*, int*, int);
 void enqueueWithPrio(queueElement**, queueElement*);
 queueElement* removeMinFromQueue(queueElement**);
+void dijkstraBackwards(int, leaf*, int, bucket**, int**, int*, int*, int);
+void freeHashTable(bucket**, int);
+void freeHTList(bucket*);
 void freeQueueVector(queueElement**, int);
+
+// const for hash values calc
+const int molt = (uint32_t)((double)A * ((uint64_t)(1) << 32));
 
 int main() {
 
@@ -84,16 +104,22 @@ int main() {
     char* command = NULL;
     int* commandArguments = NULL;
     leaf* distanceBst = NIL;
-    // int* output = NULL;
-    // int num_stations = 0;
+    bucket* hashtable[HASH_DIM];
+    int* output = NULL;
+    int num_stations = 0;
     int max_station = 0;
 
+    // initialize hash table
+    for(int i = 0; i < HASH_DIM; i++) {
+        hashtable[i] = NULL;
+    }
     // start reading from stdin
     do{
         if(!readCommand(&command)) {    // check if the input file is empty
             free(command);  // free all the allocated pointers
             free(commandArguments);
             freeBST(distanceBst);
+            freeHashTable(hashtable, HASH_DIM);
             end = 1;    // set flag to close software
         }
         else {
@@ -108,8 +134,12 @@ int main() {
                     distanceLeaf->key = commandArguments[0];
                     distanceLeaf->left = NIL;
                     distanceLeaf->right = NIL;
-                    distanceLeaf->maxAutonomy = 0;
-                    distanceLeaf->veichles = NIL;
+                    insertInBST(&distanceBst, distanceLeaf);
+                    bucket* hashTableElement = (bucket*) malloc(sizeof(bucket));    // and add his veichles into hash table
+                    hashTableElement->distance = commandArguments[0];
+                    hashTableElement->maxAutonomy = 0;
+                    hashTableElement->veichles = NIL;
+                    hashTableElement->next = NULL;
                     if(commandArguments[1] > 0) {
                         for(int i = 2; i < commandArguments[1] + 2; i++) {
                             leaf* veichleLeaf = (leaf*) malloc(sizeof(leaf));
@@ -117,15 +147,15 @@ int main() {
                             veichleLeaf->left = NIL;
                             veichleLeaf->right = NIL;
                             veichleLeaf->p = NIL;
-                            insertInBST((leaf**) &(distanceLeaf->veichles), veichleLeaf);
-                            if(commandArguments[i] > distanceLeaf->maxAutonomy) {
-                                distanceLeaf->maxAutonomy = commandArguments[i];
+                            insertInBST(&(hashTableElement->veichles), veichleLeaf);
+                            if(commandArguments[i] > hashTableElement->maxAutonomy) {
+                                hashTableElement->maxAutonomy = commandArguments[i];
                             }
                         }
                     }
-                    insertInBST(&distanceBst, distanceLeaf);
+                    insertInHashTable(hashtable, hashTableElement, hashFunction(commandArguments[0]));
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
-                    // num_stations++;
+                    num_stations++;
                 }
                 else {
                     printStdoutOptimized(NON_AGGI, NON_AGGI_DIM);    // if already exist, print non aggiunta
@@ -135,9 +165,10 @@ int main() {
                 int toDemolish = readDemolisciStazioneParameter();
                 leaf* found = searchInBST(distanceBst, toDemolish);
                 if(found != NULL) {
+                    removeFromHashTable(hashtable, hashFunction(toDemolish), toDemolish);
                     removeFromBST(&distanceBst, found);
                     printStdoutOptimized(DEMOLITA, DEMOLITA_DIM);
-                    // num_stations--;
+                    num_stations--;
                 }
                 else {
                     printStdoutOptimized(NON_DEMO, NON_DEMO_DIM);
@@ -152,7 +183,7 @@ int main() {
                     veichleToAdd->p = NULL;
                     veichleToAdd->left = NULL;
                     veichleToAdd->right = NULL;
-                    addVeichle(distanceBst, veichleToAdd);
+                    addVeichle(hashtable, hashFunction(commandArguments[0]), veichleToAdd, commandArguments[0]);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);
                 }
                 else {
@@ -163,7 +194,7 @@ int main() {
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
-                    if(scrapVeichle(distanceBst, commandArguments[1])) {
+                    if(scrapVeichle(hashtable, hashFunction(commandArguments[0]), commandArguments[1], commandArguments[0])) {
                         printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
                     else {
@@ -181,7 +212,7 @@ int main() {
                     putchar_unlocked('\n');
                 }
                 else if(commandArguments[0] < commandArguments[1]) {
-                    /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
@@ -193,10 +224,10 @@ int main() {
                         printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
-                    free(output);*/
+                    free(output);
                 }
                 else {
-                    /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
@@ -208,8 +239,10 @@ int main() {
                         printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
-                    free(output);*/
+                    free(output);
                 }
+            }
+            else {
             }
         }
     }while(!end);
@@ -341,9 +374,25 @@ void printStdoutOptimized(char* str, int dim) {
     
 }
 
+int hashFunction(int k) {   // calc of hash function
+
+    return abs(k * molt) % HASH_DIM;
+
+}
+
 int abs(int x) {
 
     return x < 0 ? (-1) * x : x;
+
+}
+
+void insertInHashTable(bucket** hashTable, bucket* element, int pos) {
+
+    if(hashTable[pos] != NULL) {    // if element already exist, add it to the head of the list
+        element->next = (struct bucket*) hashTable[pos];
+    }
+    hashTable[pos] = element;
+    return;
 
 }
 
@@ -370,10 +419,34 @@ void freeBST(leaf* T) { // post order BST visit to free all the leafs
     if(T->right != NIL) {
         freeBST((leaf*) T->right);
     }
-    if(T->veichles != NIL) {
-        freeBST((leaf*) T->veichles);
-    }
     free(T);
+    return;
+
+}
+
+void removeFromHashTable(bucket** hashTable, int hash, int distance) {  // remove element from hash table
+    
+    bucket* curr = hashTable[hash];
+    if(curr->next == NULL) {    // if there is no list, free the element
+        freeBST(curr->veichles);
+        free(curr);
+        hashTable[hash] = NULL;
+    }
+    else { 
+        bucket* pre = NULL;
+        while(curr->distance != distance) { // search for the right element in the list
+            pre = curr;
+            curr = (bucket*) curr->next;
+        }
+        if(pre != NULL) {   // if the element to free is not the head, set the list continuity
+            pre->next = curr->next;
+        }
+        else {  // else if it's the head, set the next as head on the hash table
+            hashTable[hash] = (bucket*) curr->next;
+        }
+        freeBST(curr->veichles);
+        free(curr);
+    }
     return;
 
 }
@@ -411,7 +484,6 @@ void removeFromBST(leaf** T, leaf* x) { // remove element from BST
     if(toDelete != x) {
         x->key = toDelete->key;
     }
-    freeBST((leaf*) toDelete->veichles);
     free(toDelete);
     return;
 
@@ -467,31 +539,39 @@ void readTwoIntegerParameters(int** vector) {  // read arguments for aggiungi-au
 
 }
 
-void addVeichle(leaf* T, leaf* veichleToAdd) {   // adds a new veichle into the BST of veichles of one station
+void addVeichle(bucket** hashTable, int hash, leaf* veichleToAdd, int distance) {   // adds a new veichle into the BST of veichles of one station
 
-    insertInBST((leaf**) &(T->veichles), veichleToAdd);   // add new veichle in BST
-    if(veichleToAdd->key > T->maxAutonomy) {
-        T->maxAutonomy = veichleToAdd->key;
+    bucket* curr = hashTable[hash]; // start from the head of the list
+
+    while(curr->distance != distance) {
+        curr = (bucket*) curr->next;    // search for the bucket with the right distance
     }
-
-    return;
+    insertInBST(&(curr->veichles), veichleToAdd);   // add new veichle in BST
+    if(veichleToAdd->key > curr->maxAutonomy) {
+        curr->maxAutonomy = veichleToAdd->key;
+    }
 
 }
 
-int scrapVeichle(leaf* T, int autonomy) {    // remove, if exists, an element from the BST
+int scrapVeichle(bucket** hashTable, int hash, int autonomy, int distance) {    // remove, if exists, an element from the BST
 
-    leaf* toScrap = searchInBST((leaf*) T->veichles, autonomy);  // check if exists the element to scrap
+    bucket* curr = hashTable[hash]; // start from the head of the list
+
+    while(curr->distance != distance) {
+        curr = (bucket*) curr->next;    // search for the bucket with the right distance
+    }
+    leaf* toScrap = searchInBST(curr->veichles, autonomy);  // check if exists the element to scrap
     if(toScrap == NULL) {   // if not exists return false
         return 0;
     }
     else {
         int toScrapAutonomy = toScrap->key;         // save the distance
-        removeFromBST((leaf**) &(T->veichles), toScrap);    // else remove it and return true
-        if(T->veichles == NULL) {
-            T->maxAutonomy = 0;
+        removeFromBST(&curr->veichles, toScrap);    // else remove it and return true
+        if(curr->veichles == NULL) {
+            curr->maxAutonomy = 0;
         }
-        else if(T->maxAutonomy == toScrapAutonomy) {
-            T->maxAutonomy = maxInBST((leaf*) T->veichles)->key;
+        else if(curr->maxAutonomy == toScrapAutonomy) {
+            curr->maxAutonomy = maxInBST(curr->veichles)->key;
         }
         return 1;
     }
@@ -506,6 +586,16 @@ leaf* maxInBST(leaf* T) {
         curr = (leaf*) curr->right;
     }
     return curr;
+
+}
+
+int getMaxAutonomyFromDistance(int dist, bucket** hashTable, int hash) {
+    
+    bucket* curr = hashTable[hash];
+    while(curr->distance != dist) {
+        curr = (bucket*) curr->next;
+    }
+    return curr->maxAutonomy;
 
 }
 
@@ -567,7 +657,7 @@ void printPianificaPercorso(int* stations, int count) {
 
 }
 
-/* void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
+void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
 
     queueElement* Q = NULL;
     leaf* v = s;
@@ -775,7 +865,29 @@ void freeQueue(queueElement* Q) {
     free(Q);
     return;
 
-} */
+}
+
+void freeHashTable(bucket** hashTable, int dim) {
+
+    for(int i = 0; i < dim; i++) {
+        if(hashTable[i] != NULL) {
+            freeHTList(hashTable[i]);
+        }
+    }
+    return;
+
+}
+
+void freeHTList(bucket* element) {
+
+    if(element->next != NULL) {
+        freeHTList((bucket*) element->next);
+    }
+    freeBST(element->veichles);
+    free(element);
+    return;
+
+}
 
 void freeQueueVector(queueElement** Q, int dim) {
 
