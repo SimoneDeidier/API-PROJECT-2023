@@ -35,6 +35,8 @@
 
 #define MAX_INT 2147483647
 
+#define DEBUG 1
+
 typedef struct {
 
     struct leaf* left;
@@ -77,6 +79,8 @@ void printIntStdoutOptimized(int);
 void enqueueWithPrio(queueElement**, queueElement*);
 queueElement* removeMinFromQueue(queueElement**);
 void freeQueueVector(queueElement**, int);
+
+void inOrderBST(leaf*);
 
 int main() {
 
@@ -125,6 +129,13 @@ int main() {
                     }
                     insertInBST(&distanceBst, distanceLeaf);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
+                    #if DEBUG
+                        if(commandArguments[0] == 7733) {
+                            printf("STAZIONE 7733 AGGIUNTA\n\n");
+                            inOrderBST((leaf*) distanceLeaf->veichles);
+                            printf("\n\n");
+                        }
+                    #endif
                     // num_stations++;
                 }
                 else {
@@ -152,7 +163,7 @@ int main() {
                     veichleToAdd->p = NULL;
                     veichleToAdd->left = NULL;
                     veichleToAdd->right = NULL;
-                    addVeichle(distanceBst, veichleToAdd);
+                    addVeichle(found, veichleToAdd);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);
                 }
                 else {
@@ -163,7 +174,15 @@ int main() {
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
-                    if(scrapVeichle(distanceBst, commandArguments[1])) {
+                    #if DEBUG
+                        if(commandArguments[0] == 7733) {
+                            printf("ROTTAMO AUTO CON AUT %d NELLA STAZIONE 7733\n\n", commandArguments[1]);
+                            inOrderBST((leaf*) found->veichles);
+                            printf("\n\n\n");
+                            printf("VAL: %d\n\n\n", found->key);
+                        }
+                    #endif
+                    if(scrapVeichle(found, commandArguments[1])) {
                         printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
                     else {
@@ -411,7 +430,9 @@ void removeFromBST(leaf** T, leaf* x) { // remove element from BST
     if(toDelete != x) {
         x->key = toDelete->key;
     }
-    freeBST((leaf*) toDelete->veichles);
+    if(toDelete->veichles != NULL) {
+        freeBST((leaf*) toDelete->veichles);
+    }
     free(toDelete);
     return;
 
@@ -480,11 +501,20 @@ void addVeichle(leaf* T, leaf* veichleToAdd) {   // adds a new veichle into the 
 
 int scrapVeichle(leaf* T, int autonomy) {    // remove, if exists, an element from the BST
 
+    #if DEBUG
+        inOrderBST((leaf*) T->veichles);
+    #endif
     leaf* toScrap = searchInBST((leaf*) T->veichles, autonomy);  // check if exists the element to scrap
     if(toScrap == NULL) {   // if not exists return false
+        #if DEBUG
+            printf("NON HO TROVATO NEL BST IL VALORE %d\n", autonomy);
+        #endif
         return 0;
     }
     else {
+        #if DEBUG
+            printf("VALORE %d TROVATO NEL BST\n", autonomy);
+        #endif
         int toScrapAutonomy = toScrap->key;         // save the distance
         removeFromBST((leaf**) &(T->veichles), toScrap);    // else remove it and return true
         if(T->veichles == NULL) {
@@ -785,6 +815,17 @@ void freeQueueVector(queueElement** Q, int dim) {
         }
     }
     free(Q);
+    return;
+
+}
+
+void inOrderBST(leaf* T) {
+
+    if(T == NIL) return;
+    inOrderBST((leaf*) T->left);
+    printf("%d\n", T->key);
+    inOrderBST((leaf*) T->right);
+
     return;
 
 }
