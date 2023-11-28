@@ -36,6 +36,7 @@
 #define MAX_INT 2147483647
 
 #define DEBUG 1
+#define TEST_V 4636
 
 typedef struct {
 
@@ -130,8 +131,11 @@ int main() {
                     insertInBST(&distanceBst, distanceLeaf);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
                     #if DEBUG
-                        if(commandArguments[0] == 7733) {
-                            printf("STAZIONE 7733 AGGIUNTA\n\n");
+                        if(commandArguments[0] == TEST_V) {
+                            printf("STAZIONE %d AGGIUNTA\n\n", TEST_V);
+                            printf("DISTANCE BST\n\n");
+                            inOrderBST(distanceBst);
+                            printf("VEICHLES OF STATION %d\n\n", TEST_V);
                             inOrderBST((leaf*) distanceLeaf->veichles);
                             printf("\n\n");
                         }
@@ -175,8 +179,8 @@ int main() {
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
                     #if DEBUG
-                        if(commandArguments[0] == 7733) {
-                            printf("ROTTAMO AUTO CON AUT %d NELLA STAZIONE 7733\n\n", commandArguments[1]);
+                        if(commandArguments[0] == TEST_V) {
+                            printf("ROTTAMO AUTO CON AUT %d NELLA STAZIONE %d\n\n", commandArguments[1], TEST_V);
                             inOrderBST((leaf*) found->veichles);
                             printf("\n\n\n");
                             printf("VAL: %d\n\n\n", found->key);
