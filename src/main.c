@@ -35,9 +35,6 @@
 
 #define MAX_INT 2147483647
 
-#define DEBUG 1
-#define TEST_V 4636
-
 typedef struct {
 
     struct leaf* left;
@@ -122,6 +119,8 @@ int main() {
                             veichleLeaf->left = NIL;
                             veichleLeaf->right = NIL;
                             veichleLeaf->p = NIL;
+                            veichleLeaf->veichles = NIL;
+                            veichleLeaf->maxAutonomy = 0;
                             insertInBST((leaf**) &(distanceLeaf->veichles), veichleLeaf);
                             if(commandArguments[i] > distanceLeaf->maxAutonomy) {
                                 distanceLeaf->maxAutonomy = commandArguments[i];
@@ -130,16 +129,6 @@ int main() {
                     }
                     insertInBST(&distanceBst, distanceLeaf);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
-                    #if DEBUG
-                        if(commandArguments[0] == TEST_V) {
-                            printf("STAZIONE %d AGGIUNTA\n\n", TEST_V);
-                            printf("DISTANCE BST\n\n");
-                            inOrderBST(distanceBst);
-                            printf("VEICHLES OF STATION %d\n\n", TEST_V);
-                            inOrderBST((leaf*) distanceLeaf->veichles);
-                            printf("\n\n");
-                        }
-                    #endif
                     // num_stations++;
                 }
                 else {
@@ -164,9 +153,11 @@ int main() {
                 if(found != NULL) {
                     leaf* veichleToAdd = malloc(sizeof(leaf));
                     veichleToAdd->key = commandArguments[1];
-                    veichleToAdd->p = NULL;
-                    veichleToAdd->left = NULL;
-                    veichleToAdd->right = NULL;
+                    veichleToAdd->p = NIL;
+                    veichleToAdd->left = NIL;
+                    veichleToAdd->right = NIL;
+                    veichleToAdd->maxAutonomy = 0;
+                    veichleToAdd->veichles = NIL;
                     addVeichle(found, veichleToAdd);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);
                 }
@@ -178,14 +169,6 @@ int main() {
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
-                    #if DEBUG
-                        if(commandArguments[0] == TEST_V) {
-                            printf("ROTTAMO AUTO CON AUT %d NELLA STAZIONE %d\n\n", commandArguments[1], TEST_V);
-                            inOrderBST((leaf*) found->veichles);
-                            printf("\n\n\n");
-                            printf("VAL: %d\n\n\n", found->key);
-                        }
-                    #endif
                     if(scrapVeichle(found, commandArguments[1])) {
                         printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
@@ -386,7 +369,7 @@ int readDemolisciStazioneParameter() {  // read distance parameter of the statio
 }
 
 void freeBST(leaf* T) { // post order BST visit to free all the leafs
-
+    
     if(T->left != NIL) {
         freeBST((leaf*) T->left);
     }
@@ -434,7 +417,7 @@ void removeFromBST(leaf** T, leaf* x) { // remove element from BST
     if(toDelete != x) {
         x->key = toDelete->key;
     }
-    if(toDelete->veichles != NULL) {
+    if(toDelete->veichles != NIL) {
         freeBST((leaf*) toDelete->veichles);
     }
     free(toDelete);
@@ -505,20 +488,11 @@ void addVeichle(leaf* T, leaf* veichleToAdd) {   // adds a new veichle into the 
 
 int scrapVeichle(leaf* T, int autonomy) {    // remove, if exists, an element from the BST
 
-    #if DEBUG
-        inOrderBST((leaf*) T->veichles);
-    #endif
     leaf* toScrap = searchInBST((leaf*) T->veichles, autonomy);  // check if exists the element to scrap
     if(toScrap == NULL) {   // if not exists return false
-        #if DEBUG
-            printf("NON HO TROVATO NEL BST IL VALORE %d\n", autonomy);
-        #endif
         return 0;
     }
     else {
-        #if DEBUG
-            printf("VALORE %d TROVATO NEL BST\n", autonomy);
-        #endif
         int toScrapAutonomy = toScrap->key;         // save the distance
         removeFromBST((leaf**) &(T->veichles), toScrap);    // else remove it and return true
         if(T->veichles == NULL) {
