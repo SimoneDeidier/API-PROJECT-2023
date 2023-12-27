@@ -35,6 +35,8 @@
 
 #define MAX_INT 2147483647
 
+#define DEBUG 0
+
 typedef struct {
 
     struct leaf* left;
@@ -43,17 +45,11 @@ typedef struct {
     int key;
     int maxAutonomy;
     struct leaf* veichles;
+    int distance;
+    struct leaf* prev;
+    struct leaf* next;
 
 }leaf;
-
-typedef struct {
-
-    leaf* element;
-    int distance;
-    struct queueElement* previous;
-    struct queueElement* next;
-
-}queueElement;
 
 int readCommand(char**);
 int stringCompare(char*, char*, int);
@@ -74,9 +70,9 @@ leaf* maxInBST(leaf*);
 leaf* previousInBST(leaf*);
 void printPianificaPercorso(int*, int);
 void printIntStdoutOptimized(int);
-void enqueueWithPrio(queueElement**, queueElement*);
-queueElement* removeMinFromQueue(queueElement**);
-void freeQueueVector(queueElement**, int);
+void enqueueWithPrio(leaf**, leaf*);
+leaf* removeMinFromQueue(leaf**);
+void dijkstraForward(int, leaf*, int, leaf*, int**, int*, int*, int);
 
 void inOrderBST(leaf*);
 
@@ -86,8 +82,8 @@ int main() {
     char* command = NULL;
     int* commandArguments = NULL;
     leaf* distanceBst = NIL;
-    // int* output = NULL;
-    // int num_stations = 0;
+    int* output = NULL;
+    int num_stations = 0;
     int max_station = 0;
 
     // start reading from stdin
@@ -129,7 +125,7 @@ int main() {
                     }
                     insertInBST(&distanceBst, distanceLeaf);
                     printStdoutOptimized(AGGIUNTA, AGGIUNTA_DIM);    // print aggiunta
-                    // num_stations++;
+                    num_stations++;
                 }
                 else {
                     printStdoutOptimized(NON_AGGI, NON_AGGI_DIM);    // if already exist, print non aggiunta
@@ -141,7 +137,7 @@ int main() {
                 if(found != NULL) {
                     removeFromBST(&distanceBst, found);
                     printStdoutOptimized(DEMOLITA, DEMOLITA_DIM);
-                    // num_stations--;
+                    num_stations--;
                 }
                 else {
                     printStdoutOptimized(NON_DEMO, NON_DEMO_DIM);
@@ -187,11 +183,11 @@ int main() {
                     putchar_unlocked('\n');
                 }
                 else if(commandArguments[0] < commandArguments[1]) {
-                    /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
-                    dijkstraForward(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist, max_station+1);
+                    dijkstraForward(num_stations, startLeaf, commandArguments[1], distanceBst, &output, &count, &exist, max_station+1);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
@@ -199,7 +195,7 @@ int main() {
                         printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
-                    free(output);*/
+                    free(output);
                 }
                 else {
                     /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
@@ -575,48 +571,36 @@ void printPianificaPercorso(int* stations, int count) {
 
 }
 
-/* void dijkstraForward(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
+void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** out, int* count, int* exist, int maxDim) {
 
-    queueElement* Q = NULL;
+    leaf* Q = NULL;
+    s->distance = 0;
+    s->prev = NULL;
+    s->next = NULL;
     leaf* v = s;
-    queueElement** leavesToQueueElements = malloc(sizeof(queueElement*) * maxDim);
-    for(int i = 0; i < maxDim; i++) {
-        leavesToQueueElements[i] = NULL;
-    }
     while(v->key <= dest) {
-        leavesToQueueElements[v->key] = (queueElement*) malloc(sizeof(queueElement));
-        leavesToQueueElements[v->key]->element = v;
-        leavesToQueueElements[v->key]->next = NULL;
-        if(v == s) {
-            leavesToQueueElements[v->key]->distance = 0;
-            leavesToQueueElements[v->key]->previous = NULL;
-        } 
-        else {
-            leavesToQueueElements[v->key]->distance = MAX_INT;
-            leavesToQueueElements[v->key]->previous = NULL;
+        if(v != s) {
+            v->next = NULL;
+            v->distance = MAX_INT;
+            v->prev = NULL;
         }
-        enqueueWithPrio(&Q, leavesToQueueElements[v->key]);
+        enqueueWithPrio(&Q, v);
         if(v->key != dest) {
             v = nextInBST(v);
         }
-        else {
-            break;
-        }
+        else break;
     }
     while(Q != NULL) {
-        queueElement* u = removeMinFromQueue(&Q);
-        int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
-        v = nextInBST(u->element);
-        if(v->key > u->element->key + uMaxAutonomy) {
-            freeQueueVector(leavesToQueueElements, maxDim);
+        leaf* u = removeMinFromQueue(&Q);
+        v = nextInBST(u);
+        if(v->key > u->key + u->maxAutonomy) {
             return;
         }
-        while(v->key <= u->element->key + uMaxAutonomy && v->key <= dest) {
+        while(v->key <= u->key + u->maxAutonomy && v->key <= dest) {
             int ndist = u->distance + 1;
-            queueElement* vQEl = leavesToQueueElements[v->key];
-            if(vQEl != NULL && vQEl->distance > ndist ) {
-                vQEl->distance = ndist;
-                vQEl->previous = (struct queueElement*) u;
+            if(v != NULL && v->distance > ndist ) {
+                v->distance = ndist;
+                v->prev = (struct leaf*) u;
             }
             if(v->key != dest) {
                 v = nextInBST(v);
@@ -624,49 +608,49 @@ void printPianificaPercorso(int* stations, int count) {
             else {
                 // SONO ARRIVATO A DESTINAZIONE
                 *exist = 1;
-                queueElement* x = vQEl;
+                leaf* x = v;
                 do {
-                    (*out)[*count] = x->element->key;
-                    x = (queueElement*) x->previous;
+                    (*out)[*count] = x->key;
+                    x = (leaf*) x->prev;
                     *count += 1;
                 }while(x != NULL);
-                freeQueueVector(leavesToQueueElements, maxDim);
                 return;
             }
         }
-    }
-
-}
-
-void enqueueWithPrio(queueElement** Q, queueElement* v)  {
-
-    if(*Q == NULL) {
-        *Q = v;
-    }
-    else {
-        queueElement* curr = *Q;
-        queueElement* prev = NULL;
-        while(curr->next != NULL) {
-            if(curr->distance >= v->distance) {
-                prev->next = (struct queueElement*) v;
-                v->next = (struct queueElement*) curr;
-                return;
-            }
-            prev = curr;
-            curr = (queueElement*) curr->next;
-        }
-        curr->next = (struct queueElement*) v; 
     }
     return;
 
 }
 
-queueElement* removeMinFromQueue(queueElement** Q) {
+void enqueueWithPrio(leaf** Q, leaf* v)  {
 
-    queueElement* curr = *Q;
-    queueElement* pred = NULL;
-    queueElement* min = NULL;
-    queueElement* predMin = NULL;
+    if(*Q == NULL) {
+        *Q = v;
+    }
+    else {
+        leaf* curr = *Q;
+        leaf* prev = NULL;
+        while(curr->next != NULL) {
+            if(curr->distance >= v->distance) {
+                prev->next = (struct leaf*) v;
+                v->next = (struct leaf*) curr;
+                return;
+            }
+            prev = curr;
+            curr = (leaf*) curr->next;
+        }
+        curr->next = (struct leaf*) v; 
+    }
+    return;
+
+}
+
+leaf* removeMinFromQueue(leaf** Q) {
+
+    leaf* curr = *Q;
+    leaf* pred = NULL;
+    leaf* min = NULL;
+    leaf* predMin = NULL;
 
     if((*Q)->next == NULL) {
         min = *Q;
@@ -675,6 +659,7 @@ queueElement* removeMinFromQueue(queueElement** Q) {
     }
 
     while(curr != NULL) {
+
         if(min == NULL) {
             min = curr;
         }
@@ -682,15 +667,15 @@ queueElement* removeMinFromQueue(queueElement** Q) {
             min = curr;
             predMin = pred;
         }
-        else if(curr->distance == min->distance && curr->element->key < min->element->key) {
+        else if(curr->distance == min->distance && curr->key < min->key) {
             min = curr;
             predMin = pred;
         }
         pred = curr;
-        curr = (queueElement*) curr->next;
+        curr = (leaf*) curr->next;
     }
     if(predMin == NULL) {
-        *Q = (queueElement*) min->next;
+        *Q = (leaf*) min->next;
     }
     else {
         predMin->next = min->next;
@@ -699,20 +684,7 @@ queueElement* removeMinFromQueue(queueElement** Q) {
 
 }
 
-queueElement* searchInQueue(queueElement* Q, leaf* q) {
-
-    queueElement* tmp = Q;
-    while(tmp->element != q) {
-        if(tmp->element != q && tmp->next == NULL) {
-            return NULL;
-        }
-        tmp = (queueElement*) tmp->next;
-    }
-    return tmp;
-
-}
-
-void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
+/*void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
 
     queueElement* Q = NULL;
     leaf* v = s;
@@ -784,18 +756,6 @@ void freeQueue(queueElement* Q) {
     return;
 
 } */
-
-void freeQueueVector(queueElement** Q, int dim) {
-
-    for(int i = 0; i < dim; i++) {
-        if(Q[i] != NULL) {
-            free(Q[i]);
-        }
-    }
-    free(Q);
-    return;
-
-}
 
 void inOrderBST(leaf* T) {
 
