@@ -35,7 +35,8 @@
 
 #define MAX_INT 2147483647
 
-#define DEBUG 1
+#define CHECK 0
+#define DEBUG 0
 
 typedef struct {
 
@@ -75,6 +76,7 @@ leaf* removeMinFromQueue(leaf**);
 void dijkstraForward(int, leaf*, int, leaf*, int**, int*, int*, int);
 
 void inOrderBST(leaf*);
+void inOrderBST_STAR(leaf*);
 
 int main() {
 
@@ -165,12 +167,6 @@ int main() {
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
-                    #if DEBUG
-                        if(commandArguments[0] == 7733 && commandArguments[1] == 1999) {
-                            printf("ROTTAMA AUTO!\n");
-                            inOrderBST((leaf*) found->veichles);
-                        }
-                    #endif
                     if(scrapVeichle(found, commandArguments[1])) {
                         printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
@@ -419,9 +415,16 @@ void removeFromBST(leaf** T, leaf* x) { // remove element from BST
     }
     if(toDelete != x) {
         x->key = toDelete->key;
+        x->maxAutonomy = toDelete->maxAutonomy;
+        if(x->veichles != NIL) {
+            freeBST((leaf*) x->veichles);
+        }
+        x->veichles = toDelete->veichles;
     }
-    if(toDelete->veichles != NIL) {
-        freeBST((leaf*) toDelete->veichles);
+    else {
+        if(x->veichles != NIL) {
+            freeBST((leaf*) x->veichles);
+        }
     }
     free(toDelete);
     return;
@@ -752,17 +755,7 @@ leaf* removeMinFromQueue(leaf** Q) {
         }
     }
 
-}
-
-void freeQueue(queueElement* Q) {
-
-    if(Q->next != NULL) {
-        freeQueue((queueElement*) Q->next);
-    }
-    free(Q);
-    return;
-
-} */
+}*/
 
 void inOrderBST(leaf* T) {
 
@@ -770,6 +763,21 @@ void inOrderBST(leaf* T) {
     inOrderBST((leaf*) T->left);
     printf("%d\n", T->key);
     inOrderBST((leaf*) T->right);
+
+    return;
+
+}
+
+void inOrderBST_STAR(leaf* T) {
+
+    if(T == NIL) return;
+    inOrderBST_STAR((leaf*) T->left);
+    if(T->key == 7733) {
+        printf("VEICHLES OF %d: ", T->key);
+        inOrderBST((leaf*) T->veichles);
+        printf("\n\n");
+    }
+    inOrderBST_STAR((leaf*) T->right);
 
     return;
 
