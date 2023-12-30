@@ -35,8 +35,7 @@
 
 #define MAX_INT 2147483647
 
-#define CHECK 0
-#define DEBUG 0
+#define DEBUG 1
 
 typedef struct {
 
@@ -74,9 +73,8 @@ void printIntStdoutOptimized(int);
 void enqueueWithPrio(leaf**, leaf*);
 leaf* removeMinFromQueue(leaf**);
 void dijkstraForward(int, leaf*, int, leaf*, int**, int*, int*, int);
-
-void inOrderBST(leaf*);
-void inOrderBST_STAR(leaf*);
+void dijkstraBackwards(int, leaf*, int, leaf*, int**, int*, int*, int);
+void updateQueue(leaf**, leaf*);
 
 int main() {
 
@@ -200,12 +198,11 @@ int main() {
                     free(output);
                 }
                 else {
-                    printf("PIANIFICA PERCORSO BACKWARDS\n");
-                    /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
+                    leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
                     int count = 0;
-                    dijkstraBackwards(num_stations, startLeaf, commandArguments[1], hashtable, &output, &count, &exist, max_station+1);
+                    dijkstraBackwards(num_stations, startLeaf, commandArguments[1], distanceBst, &output, &count, &exist, max_station+1);
                     if(!exist) {
                         printStdoutOptimized(NESS_PER, NESS_PER_DIM);
                     }
@@ -213,7 +210,7 @@ int main() {
                         printPianificaPercorso(output, count);
                     }
                     // free the output vector mallocated
-                    free(output);*/
+                    free(output);
                 }
             }
         }
@@ -610,6 +607,7 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
             int ndist = u->distance + 1;
             if(v != NULL && v->distance > ndist ) {
                 v->distance = ndist;
+                updateQueue(&Q, v);
                 v->prev = (struct leaf*) u;
             }
             if(v->key != dest) {
@@ -641,9 +639,17 @@ void enqueueWithPrio(leaf** Q, leaf* v)  {
         leaf* curr = *Q;
         leaf* prev = NULL;
         while(curr->next != NULL) {
-            if(curr->distance >= v->distance) {
-                prev->next = (struct leaf*) v;
+            if(curr->distance >= v->distance) {     // TODO: da fare qui
+                if(curr != *Q) {
+                    prev->next = (struct leaf*) v;
+                    v->prev = (struct leaf*) prev;
+                }
+                else {
+                    *Q = v;
+                    v->prev = NULL;
+                }
                 v->next = (struct leaf*) curr;
+                curr->prev = (struct leaf*) v;
                 return;
             }
             prev = curr;
@@ -661,6 +667,7 @@ leaf* removeMinFromQueue(leaf** Q) {
     leaf* pred = NULL;
     leaf* min = NULL;
     leaf* predMin = NULL;
+    int minDist = curr->distance;
 
     if((*Q)->next == NULL) {
         min = *Q;
@@ -668,74 +675,69 @@ leaf* removeMinFromQueue(leaf** Q) {
         return min;
     }
 
-    while(curr != NULL) {
+    while(curr->distance == minDist) {
 
+        #if DEBUG
+            printf("CHECK SUL NODO %d CON PRIO %d\n", curr->key, curr->distance);
+        #endif
         if(min == NULL) {
             min = curr;
         }
-        else if(curr->distance < min->distance) {
-            min = curr;
-            predMin = pred;
-        }
-        else if(curr->distance == min->distance && curr->key < min->key) {
+        else if(curr->key < min->key) {
             min = curr;
             predMin = pred;
         }
         pred = curr;
         curr = (leaf*) curr->next;
     }
+    leaf* nextOfMin = (leaf*) min->next;
     if(predMin == NULL) {
-        *Q = (leaf*) min->next;
+        *Q = nextOfMin;
+        nextOfMin->prev = NULL;
     }
     else {
-        predMin->next = min->next;
+        predMin->next = (struct leaf*) nextOfMin;
+        nextOfMin->prev = (struct leaf*) predMin;
     }
+    #if DEBUG
+        printf("NODO SCELTO: %d\n", min->key);
+        printf("\n\n--------\n\n");
+    #endif
     return min;
 
 }
 
-/*void dijkstraBackwards(int nStations, leaf* s, int dest, bucket** hashTable, int** out, int* count, int* exist, int maxDim) {
+void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int** out, int* count, int* exist, int maxDim) {
 
-    queueElement* Q = NULL;
+    leaf* Q = NULL;
+    s->distance = 0;
+    s->prev = NULL;
+    s->next = NULL;
     leaf* v = s;
-    queueElement** leavesToQueueElements = malloc(sizeof(queueElement*) * maxDim);
-    for(int i = 0; i < maxDim; i++) {
-        leavesToQueueElements[i] = NULL;
-    }
     while(v->key >= dest) {
-        leavesToQueueElements[v->key] = (queueElement*) malloc(sizeof(queueElement));
-        leavesToQueueElements[v->key]->element = v;
-        leavesToQueueElements[v->key]->next = NULL;
-        if(v == s) {
-            leavesToQueueElements[v->key]->distance = 0;
-            leavesToQueueElements[v->key]->previous = NULL;
+        if(v != s) {
+            v->next = NULL;
+            v->distance = MAX_INT;
+            v->prev = NULL;
         } 
-        else {
-            leavesToQueueElements[v->key]->distance = MAX_INT;
-            leavesToQueueElements[v->key]->previous = NULL;
-        }
-        enqueueWithPrio(&Q, leavesToQueueElements[v->key]);
+        enqueueWithPrio(&Q, v);
         if(v->key != dest) {
             v = previousInBST(v);
         }
-        else {
-            break;
-        }
+        else break;
     }
     while(Q != NULL) {
-        queueElement* u = removeMinFromQueue(&Q);
-        int uMaxAutonomy = getMaxAutonomyFromDistance(u->element->key, hashTable, hashFunction(u->element->key));
-        v = previousInBST(u->element);
-        if(v->key < u->element->key - uMaxAutonomy) {
-            freeQueueVector(leavesToQueueElements, maxDim);
+        leaf* u = removeMinFromQueue(&Q);
+        v = previousInBST(u);
+        if(v->key < u->key - u->maxAutonomy) {
             return;
         }
-        while(v->key >= u->element->key - uMaxAutonomy && v->key >= dest) {
+        while(v->key >= u->key - u->maxAutonomy && v->key >= dest) {
             int ndist = u->distance + 1;
-            queueElement* vQEl = leavesToQueueElements[v->key];
-            if(vQEl != NULL && vQEl->distance > ndist ) {
-                vQEl->distance = ndist;
-                vQEl->previous = (struct queueElement*) u;
+            if(v != NULL && v->distance > ndist ) {
+                v->distance = ndist;
+                updateQueue(&Q, v);
+                v->prev = (struct leaf*) u;
             }
             if(v->key != dest) {
                 v = previousInBST(v);
@@ -743,42 +745,32 @@ leaf* removeMinFromQueue(leaf** Q) {
             else {
                 // SONO ARRIVATO A DESTINAZIONE
                 *exist = 1;
-                queueElement* x = vQEl;
+                leaf* x = v;
                 do {
-                    (*out)[*count] = x->element->key;
-                    x = (queueElement*) x->previous;
+                    (*out)[*count] = x->key;
+                    x = (leaf*) x->prev;
                     *count += 1;
                 }while(x != NULL);
-                freeQueueVector(leavesToQueueElements, maxDim);
                 return;
             }
         }
     }
 
-}*/
-
-void inOrderBST(leaf* T) {
-
-    if(T == NIL) return;
-    inOrderBST((leaf*) T->left);
-    printf("%d\n", T->key);
-    inOrderBST((leaf*) T->right);
-
-    return;
-
 }
 
-void inOrderBST_STAR(leaf* T) {
+void updateQueue(leaf** Q, leaf* v) {
 
-    if(T == NIL) return;
-    inOrderBST_STAR((leaf*) T->left);
-    if(T->key == 7733) {
-        printf("VEICHLES OF %d: ", T->key);
-        inOrderBST((leaf*) T->veichles);
-        printf("\n\n");
+    if(v != *Q) {
+        leaf* prevOfV = (leaf*) v->prev;
+        prevOfV->next = v->next;
+        leaf* nextOfV = (leaf*) v->next;
+        if(nextOfV != NULL) {
+            nextOfV->prev = (struct leaf*) prevOfV;
+        }
     }
-    inOrderBST_STAR((leaf*) T->right);
-
-    return;
+    else {
+        *Q = (leaf*) v->next;
+    }
+    enqueueWithPrio(Q, v);
 
 }
