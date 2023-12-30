@@ -35,7 +35,7 @@
 
 #define MAX_INT 2147483647
 
-#define DEBUG 0
+#define DEBUG 1
 
 typedef struct {
 
@@ -165,6 +165,12 @@ int main() {
                 readTwoIntegerParameters(&commandArguments);
                 leaf* found = searchInBST(distanceBst, commandArguments[0]);
                 if(found != NULL) {
+                    #if DEBUG
+                        if(commandArguments[0] == 7733 && commandArguments[1] == 1999) {
+                            printf("ROTTAMA AUTO!\n");
+                            inOrderBST((leaf*) found->veichles);
+                        }
+                    #endif
                     if(scrapVeichle(found, commandArguments[1])) {
                         printStdoutOptimized(ROTTAMAT, ROTTAMAT_DIM);
                     }
@@ -198,6 +204,7 @@ int main() {
                     free(output);
                 }
                 else {
+                    printf("PIANIFICA PERCORSO BACKWARDS\n");
                     /*leaf* startLeaf = searchInBST(distanceBst, commandArguments[0]);
                     output = (int*) malloc(sizeof(int) * num_stations);
                     int exist = 0;
