@@ -580,6 +580,9 @@ void printPianificaPercorso(int* stations, int count) {
 
 void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** out, int* count, int* exist, int maxDim) {
 
+    #if DEBUG
+        printf("DIJKSTRA DA %d A %d\n", s->key, dest);
+    #endif
     leaf* Q = NULL;
     s->distance = 0;
     s->prev = NULL;
@@ -597,6 +600,24 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
         }
         else break;
     }
+    #if DEBUG
+        printf("PRINT QUEUE\n\n");
+        leaf* test = Q;
+        leaf* a = NULL;
+        while(test != NULL) {
+            printf("EL: %d", test->key);
+            if(test->prev != NULL) {
+                a = (leaf*) test->prev;
+                printf(", prev: %d", a->key);
+            }
+            if(test->next != NULL) {
+                a = (leaf*) test->next;
+                printf(", next: %d", a->key);
+            }
+            printf("\n");
+            test = (leaf*) test->next;
+        }
+    #endif
     while(Q != NULL) {
         leaf* u = removeMinFromQueue(&Q);
         v = nextInBST(u);
@@ -608,6 +629,25 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
             if(v != NULL && v->distance > ndist ) {
                 v->distance = ndist;
                 updateQueue(&Q, v);
+                #if DEBUG
+                    printf("PRINT QUEUE\n\n");
+                    printf("UPDATED VALUE: %d NEW DIST %d\n\n", v->key, v->distance);
+                    leaf* test = Q;
+                    leaf* a = NULL;
+                    while(test != NULL) {
+                        printf("EL: %d", test->key);
+                        if(test->prev != NULL) {
+                            a = (leaf*) test->prev;
+                            printf(", prev: %d", a->key);
+                        }
+                        if(test->next != NULL) {
+                            a = (leaf*) test->next;
+                            printf(", next: %d", a->key);
+                        }
+                        printf("\n");
+                        test = (leaf*) test->next;
+                    }
+                #endif
                 v->prev = (struct leaf*) u;
             }
             if(v->key != dest) {
@@ -639,23 +679,27 @@ void enqueueWithPrio(leaf** Q, leaf* v)  {
         leaf* curr = *Q;
         leaf* prev = NULL;
         while(curr->next != NULL) {
-            if(curr->distance >= v->distance) {     // TODO: da fare qui
-                if(curr != *Q) {
-                    prev->next = (struct leaf*) v;
-                    v->prev = (struct leaf*) prev;
-                }
-                else {
+            if(curr->distance > v->distance || (curr->distance == v->distance && curr->key > v->key)) {     // TODO: da fare qui
+                if(curr == *Q) {
                     *Q = v;
+                    v->next = (struct leaf*) curr;
+                    curr->prev = (struct leaf*) v;
                     v->prev = NULL;
                 }
-                v->next = (struct leaf*) curr;
-                curr->prev = (struct leaf*) v;
+                else {
+                    v->prev = (struct leaf*) prev;
+                    v->next = (struct leaf*) curr;
+                    prev->next = (struct leaf*) v;
+                    curr->prev = (struct leaf*) v;
+                }
                 return;
             }
             prev = curr;
             curr = (leaf*) curr->next;
         }
-        curr->next = (struct leaf*) v; 
+        curr->next = (struct leaf*) v;
+        v->prev = (struct leaf*) curr;
+        v->next = NULL;
     }
     return;
 
@@ -677,9 +721,6 @@ leaf* removeMinFromQueue(leaf** Q) {
 
     while(curr->distance == minDist) {
 
-        #if DEBUG
-            printf("CHECK SUL NODO %d CON PRIO %d\n", curr->key, curr->distance);
-        #endif
         if(min == NULL) {
             min = curr;
         }
@@ -699,10 +740,6 @@ leaf* removeMinFromQueue(leaf** Q) {
         predMin->next = (struct leaf*) nextOfMin;
         nextOfMin->prev = (struct leaf*) predMin;
     }
-    #if DEBUG
-        printf("NODO SCELTO: %d\n", min->key);
-        printf("\n\n--------\n\n");
-    #endif
     return min;
 
 }
@@ -760,17 +797,23 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
 
 void updateQueue(leaf** Q, leaf* v) {
 
-    if(v != *Q) {
-        leaf* prevOfV = (leaf*) v->prev;
-        prevOfV->next = v->next;
-        leaf* nextOfV = (leaf*) v->next;
-        if(nextOfV != NULL) {
-            nextOfV->prev = (struct leaf*) prevOfV;
-        }
+    if(v == *Q) {
+        leaf* next = (leaf*) v->next;
+        *Q = (leaf*) next;
+        next->prev = NULL;
+    }
+    else if(v->next == NULL) {
+        leaf* prev = (leaf*) v->prev;
+        prev->next = NULL;
     }
     else {
-        *Q = (leaf*) v->next;
+        leaf* prev = (leaf*) v->prev;
+        leaf* next = (leaf*) v->next;
+        prev->next = (struct leaf*) next;
+        next->prev = (struct leaf*) prev;
     }
+    v->next = NULL;
+    v->prev = NULL;
     enqueueWithPrio(Q, v);
 
 }
