@@ -707,7 +707,17 @@ void enqueueWithPrio(leaf** Q, leaf* v)  {
 
 leaf* removeMinFromQueue(leaf** Q) {
 
-    leaf* curr = *Q;
+    leaf* res = *Q;
+    if((*Q)->next != NULL) {
+        *Q = (leaf*) res->next;
+        (*Q)->prev = NULL;
+    }
+    else {
+        *Q = NULL;
+    }
+    return res;
+
+    /*leaf* curr = *Q;
     leaf* pred = NULL;
     leaf* min = NULL;
     leaf* predMin = NULL;
@@ -740,7 +750,7 @@ leaf* removeMinFromQueue(leaf** Q) {
         predMin->next = (struct leaf*) nextOfMin;
         nextOfMin->prev = (struct leaf*) predMin;
     }
-    return min;
+    return min;*/
 
 }
 
