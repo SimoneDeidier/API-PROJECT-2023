@@ -35,8 +35,6 @@
 
 #define MAX_INT 2147483647
 
-#define DEBUG 0
-
 typedef struct {
 
     struct leaf* left;
@@ -46,8 +44,9 @@ typedef struct {
     int maxAutonomy;
     struct leaf* veichles;
     int distance;
-    struct leaf* prev;
-    struct leaf* next;
+    struct leaf* dijkstraPreviousVertex;
+    struct leaf* nextInQueue;
+    struct leaf* prevInQueue;
 
 }leaf;
 
@@ -211,9 +210,6 @@ int main() {
                     }
                     // free the output vector mallocated
                     free(output);
-                    #if DEBUG
-                        if(commandArguments[0] == 8809 && commandArguments[1] == 1024) exit(1);
-                    #endif
                 }
             }
         }
@@ -585,14 +581,16 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
 
     leaf* Q = NULL;
     s->distance = 0;
-    s->prev = NULL;
-    s->next = NULL;
+    s->dijkstraPreviousVertex = NULL;
+    s->nextInQueue = NULL;
+    s->prevInQueue = NULL;
     leaf* v = s;
     while(v->key <= dest) {
         if(v != s) {
-            v->next = NULL;
+            v->nextInQueue = NULL;
             v->distance = MAX_INT;
-            v->prev = NULL;
+            v->dijkstraPreviousVertex = NULL;
+            v->prevInQueue = NULL;
         }
         enqueueWithPrio(&Q, v);
         if(v->key != dest) {
@@ -611,7 +609,7 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
             if(v != NULL && v->distance > ndist ) {
                 v->distance = ndist;
                 updateQueue(&Q, v);
-                v->prev = (struct leaf*) u;
+                v->dijkstraPreviousVertex = (struct leaf*) u;
             }
             if(v->key != dest) {
                 v = nextInBST(v);
@@ -621,7 +619,7 @@ void dijkstraForward(int nStations, leaf* s, int dest, leaf* distanceBst, int** 
                 leaf* x = v;
                 do {
                     (*out)[*count] = x->key;
-                    x = (leaf*) x->prev;
+                    x = (leaf*) x->dijkstraPreviousVertex;
                     *count += 1;
                 }while(x != NULL);
                 return;
@@ -640,28 +638,27 @@ void enqueueWithPrio(leaf** Q, leaf* v)  {
     else {
         leaf* curr = *Q;
         leaf* prev = NULL;
-        while(curr->next != NULL) {
+        while(curr->nextInQueue != NULL) {
             if(curr->distance > v->distance || (curr->distance == v->distance && curr->key > v->key)) {
                 if(curr == *Q) {
                     *Q = v;
-                    v->next = (struct leaf*) curr;
-                    curr->prev = (struct leaf*) v;
-                    v->prev = NULL;
+                    v->nextInQueue = (struct leaf*) curr;
+                    curr->prevInQueue = (struct leaf*) v;
                 }
                 else {
-                    v->prev = (struct leaf*) prev;
-                    v->next = (struct leaf*) curr;
-                    prev->next = (struct leaf*) v;
-                    curr->prev = (struct leaf*) v;
+                    v->nextInQueue = (struct leaf*) curr;
+                    v->prevInQueue = (struct leaf*) prev;
+                    prev->nextInQueue = (struct leaf*) v;
+                    curr->prevInQueue = (struct leaf*) v;
                 }
                 return;
             }
             prev = curr;
-            curr = (leaf*) curr->next;
+            curr = (leaf*) curr->nextInQueue;
         }
-        curr->next = (struct leaf*) v;
-        v->prev = (struct leaf*) curr;
-        v->next = NULL;
+        curr->nextInQueue = (struct leaf*) v;
+        v->nextInQueue = NULL;
+        v->prevInQueue = (struct leaf*) curr;
     }
     return;
 
@@ -670,12 +667,16 @@ void enqueueWithPrio(leaf** Q, leaf* v)  {
 leaf* removeMinFromQueue(leaf** Q) {
 
     leaf* res = *Q;
-    if((*Q)->next != NULL) {
-        *Q = (leaf*) res->next;
+    if((*Q)->nextInQueue != NULL) {
+        leaf* next = (leaf*) res->nextInQueue;
+        *Q = (leaf*) next;
+        next->prevInQueue = NULL;
     }
     else {
         *Q = NULL;
     }
+    res->nextInQueue = NULL;
+    res->prevInQueue = NULL;
     return res;
 
 }
@@ -684,14 +685,14 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
 
     leaf* Q = NULL;
     s->distance = 0;
-    s->prev = NULL;
-    s->next = NULL;
+    s->dijkstraPreviousVertex = NULL;
+    s->nextInQueue = NULL;
     leaf* v = s;
     while(v->key >= dest) {
         if(v != s) {
-            v->next = NULL;
+            v->nextInQueue = NULL;
             v->distance = MAX_INT;
-            v->prev = NULL;
+            v->dijkstraPreviousVertex = NULL;
         } 
         enqueueWithPrio(&Q, v);
         if(v->key != dest) {
@@ -699,15 +700,6 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
         }
         else break;
     }
-    #if DEBUG
-        printf("QUEUE\n\n");
-        leaf* temp = Q;
-        while(temp != NULL) {
-            printf("| %4d |\n", temp->key);
-            temp = (leaf*) temp->next;
-        }
-        printf("\n\n\n");
-    #endif
     while(Q != NULL) {
         leaf* u = removeMinFromQueue(&Q);
         v = previousInBST(u);
@@ -719,11 +711,7 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
             if(v != NULL && v->distance > ndist ) {
                 v->distance = ndist;
                 updateQueue(&Q, v);
-                v->prev = (struct leaf*) u;
-                #if DEBUG
-                    leaf* a = (leaf*) v->prev;
-                    printf("[*] - UPDATED VALUE %d, DIST %d PREV %d\n", v->key, v->distance, a->key);
-                #endif
+                v->dijkstraPreviousVertex = (struct leaf*) u;
             }
             if(v->key != dest) {
                 v = previousInBST(v);
@@ -734,7 +722,7 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
                 do {
                     (*out)[*count] = x->key;
                     *count += 1;
-                    x = (leaf*) x->prev;
+                    x = (leaf*) x->dijkstraPreviousVertex;
                 }while(x != NULL);
                 return;
             }
@@ -745,35 +733,23 @@ void dijkstraBackwards(int nStations, leaf* s, int dest, leaf* distanceBst, int*
 
 void updateQueue(leaf** Q, leaf* v) {
 
-    #if DEBUG
-        printf("UPDATING THE VALUE %d IN QUEUE\n", v->key);
-    #endif
     if(v == *Q) {
-        leaf* next = (leaf*) v->next;
+        leaf* next = (leaf*) v->nextInQueue;
         *Q = (leaf*) next;
-        next->prev = NULL;
-        #if DEBUG
-            printf("\tREMOVED VALUE, NOW FIRST ELEMENT OF QUEUE: %d\n", next->key);
-        #endif
+        next->prevInQueue = NULL;
     }
-    else if(v->next == NULL) {
-        leaf* prev = (leaf*) v->prev;
-        prev->next = NULL;
-        #if DEBUG
-            printf("\tREMOVED VALUE, NOW LAST ELEMENT OF QUEUE: %d\n", prev->key);
-        #endif
+    else if(v->nextInQueue == NULL) {
+        leaf* previous = (leaf*) v->prevInQueue;
+        previous->nextInQueue = NULL;
     }
     else {
-        leaf* prev = (leaf*) v->prev;
-        leaf* next = (leaf*) v->next;
-        prev->next = (struct leaf*) next;
-        next->prev = (struct leaf*) prev;
-        #if DEBUG
-            printf("\tREMOVED VALUE, NOW LINK: %d--%d\n", prev->key, next->key);
-        #endif
+        leaf* previous = (leaf*) v->prevInQueue;
+        leaf* next = (leaf*) v->nextInQueue;
+        previous->nextInQueue = (struct leaf*) next;
+        next->prevInQueue = (struct leaf*) previous;
     }
-    v->next = NULL;
-    v->prev = NULL;
+    v->nextInQueue = NULL;
+    v->prevInQueue = NULL;
     enqueueWithPrio(Q, v);
 
 }
